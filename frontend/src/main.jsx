@@ -41,7 +41,8 @@ import { BrowserRouter } from 'react-router-dom';
 import { Provider } from "react-redux";
 import { store } from './redux/store.js';
 
-export const serverUrl = "http://localhost:8000";
+// LIVE BACKEND LINK ADDED
+export const serverUrl = "https://realtimechatapp-index.onrender.com";
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <Provider store={store}>
@@ -50,5 +51,3 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </Provider>
 );
-
-

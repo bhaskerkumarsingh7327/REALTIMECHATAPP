@@ -200,8 +200,7 @@ import axios from "axios";
 import { useDispatch } from "react-redux";
 import { setUserData } from "../redux/userSlice";
 import { useNavigate } from "react-router-dom";
-
-const serverUrl = "http://localhost:8000";
+import { serverUrl } from "../main"; // FIXED: Now importing from main.jsx
 
 function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -237,7 +236,6 @@ function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0d1117] px-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-violet-600 mb-4 text-3xl shadow-lg shadow-violet-600/30">
             💬

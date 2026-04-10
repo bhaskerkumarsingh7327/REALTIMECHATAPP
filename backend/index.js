@@ -224,11 +224,19 @@ connectDB();
 
 const app = express();
 
-const allowedOrigins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"];
+// 🔥 FIXED: Added your Live Frontend Link here
+const allowedOrigins = [
+  "http://localhost:5173", 
+  "http://127.0.0.1:5173", 
+  "http://localhost:5174", 
+  "http://127.0.0.1:5174",
+  "https://realtimechatapp-frontend-7uv3.onrender.com" // Your Live Frontend
+];
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));
@@ -237,6 +245,7 @@ app.use(cors({
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 }));
+
 app.use(express.json());
 app.use(cookieParser());
 
@@ -251,6 +260,8 @@ app.use("/api/user", userRouter);
 app.use("/api/media", mediaRouter);
 
 const server = http.createServer(app);
+
+// 🔥 FIXED: Socket.io CORS also updated
 const io = new Server(server, {
   cors: { 
     origin: allowedOrigins, 
@@ -259,7 +270,6 @@ const io = new Server(server, {
   },
 });
 
-// Track which socket is in which room
 const roomUsers = {};
 
 io.on("connection", (socket) => {
@@ -275,28 +285,22 @@ io.on("connection", (socket) => {
   });
 
   socket.on("send-message", ({ roomId, message }) => {
-    // Broadcast to all OTHER users in room
     socket.to(roomId).emit("receive-message", { chatId: roomId, message });
   });
 
   // ---- CALL SIGNALING ----
-  // Initiator sends call-user
   socket.on("call-user", ({ roomId, signal, callType, from }) => {
-    // Notify others in the room of incoming call
     socket.to(roomId).emit("incoming-call", { from, signal, callType });
   });
 
-  // Both sides send signal to forward WebRTC SDP/ICE
   socket.on("signal", ({ roomId, signal }) => {
     socket.to(roomId).emit("signal", { signal, from: socket.id });
   });
 
-  // End call notification
   socket.on("end-call", ({ roomId } = {}) => {
     if (roomId) socket.to(roomId).emit("end-call");
   });
 
-  // Call status messages
   socket.on("call-started", ({ roomId, callType, sender }) => {
     socket.to(roomId).emit("receive-message", {
       chatId: roomId,
@@ -312,7 +316,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    // Clean up roomUsers
     for (const roomId in roomUsers) {
       roomUsers[roomId] = roomUsers[roomId].filter((id) => id !== socket.id);
     }

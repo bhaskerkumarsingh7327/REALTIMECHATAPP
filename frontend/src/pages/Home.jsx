@@ -2020,7 +2020,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { useNavigate, Link } from "react-router-dom"; // Link add kiya
+import { useNavigate, Link } from "react-router-dom"; 
 import { SwipeableList, SwipeableListItem } from "react-swipeable-list";
 import "react-swipeable-list/dist/styles.css";
 import { clearUserData } from "../redux/userSlice";
@@ -2030,7 +2030,8 @@ import { serverUrl } from "../main";
 import CallButtons from "../components/CallButtons";
 import CallManager from "../components/CallManager";
 
-const SOCKET_URL = "http://localhost:8000";
+// LIVE BACKEND SOCKET LINK ADDED
+const SOCKET_URL = "https://realtimechatapp-index.onrender.com";
 
 function Home() {
   const dispatch = useDispatch();
@@ -2045,7 +2046,6 @@ function Home() {
   const [searchResults, setSearchResults] = useState([]);
   const socketRef = useRef();
 
-  // 1. Fetch Chats
   const fetchChats = async () => {
     if (!userData?._id) return;
     try {
@@ -2056,26 +2056,23 @@ function Home() {
     }
   };
 
-  // Socket Connection & General Listeners
   useEffect(() => {
     if (!userData) return;
 
     socketRef.current = io(SOCKET_URL);
     
-    // Apni ID join karein private notifications ke liye
     socketRef.current.emit("join-room", userData._id);
 
     fetchChats();
 
     socketRef.current.on("receive-message", (data) => {
-      // Logic: Check if the message belongs to the current open chat
       setSelectedChat((prev) => {
         if (prev && prev._id === data.chatId) {
           return { ...prev, messages: [...(prev.messages || []), data.message] };
         }
         return prev;
       });
-      fetchChats(); // Refresh sidebar for last message
+      fetchChats();
     });
 
     return () => {
@@ -2083,7 +2080,6 @@ function Home() {
     };
   }, [userData]);
 
-  // 🔥 Room Join Logic: Jab chat select ho tab us room mein enter karein
   useEffect(() => {
     if (selectedChat?._id && socketRef.current) {
       socketRef.current.emit("join-room", selectedChat._id);
@@ -2127,18 +2123,15 @@ function Home() {
     };
 
     try {
-      // 1. Database mein save karein
       const res = await axios.post(`${serverUrl}/api/chat/message`, msgData);
       const savedMsg = res.data;
 
-      // 2. Socket ke zariye dusre ko bhejein
       socketRef.current.emit("send-message", {
-        roomId: selectedChat._id, // Room ID chat ki ID hi hai
+        roomId: selectedChat._id,
         chatId: selectedChat._id,
         message: savedMsg,
       });
       
-      // 3. Apni screen update karein
       setSelectedChat((prev) => ({
         ...prev,
         messages: [...(prev.messages || []), savedMsg],
@@ -2155,7 +2148,6 @@ function Home() {
 
   return (
     <div className="flex h-screen bg-[#0d1117] text-white overflow-hidden font-sans">
-      {/* Sidebar */}
       <div className="w-full md:w-96 border-r border-white/10 flex flex-col bg-[#161b22]/50 backdrop-blur-xl">
         <div className="p-6 flex justify-between items-center border-b border-white/10 bg-[#161b22]/80">
           <div className="flex flex-col">
@@ -2163,7 +2155,6 @@ function Home() {
             <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Realtime</span>
           </div>
           <div className="flex gap-2">
-             {/* Profile Page Link */}
              <Link to="/profile" className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 transition-all">
                 👤
              </Link>
@@ -2200,7 +2191,6 @@ function Home() {
         </div>
       </div>
 
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col bg-[#0d1117]">
         {selectedChat ? (
           <>
@@ -2228,13 +2218,13 @@ function Home() {
 
             <div className="p-4 bg-[#161b22]/50 border-t border-white/10 flex gap-2">
                 <input
-                  className="flex-1 bg-white/5 border border-white/10 p-3 rounded-xl outline-none focus:border-violet-500 transition-all"
+                  className="flex-1 bg-white/5 border border-white/10 p-3 rounded-xl outline-none focus:border-violet-500 transition-all text-sm"
                   placeholder="Type a message..."
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 />
-                <button onClick={handleSend} className="bg-violet-600 px-6 rounded-xl font-bold hover:bg-violet-500 transition-all">Send</button>
+                <button onClick={handleSend} className="bg-violet-600 px-6 rounded-xl font-bold hover:bg-violet-500 transition-all text-sm">Send</button>
             </div>
           </>
         ) : (
@@ -2245,7 +2235,6 @@ function Home() {
         )}
       </div>
 
-      {/* Add Chat Modal */}
       {showAddChatModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-[#1c2128] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl">
