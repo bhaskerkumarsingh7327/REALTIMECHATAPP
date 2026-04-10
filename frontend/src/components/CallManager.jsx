@@ -438,58 +438,122 @@
 //   grayBtn: { background: "#374151", color: "#fff" },
 //   activeBtn: { background: "#f59e0b", color: "#fff" },
 // };
-import { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import Peer from "simple-peer";
 
 const ICE_SERVERS = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ],
 };
 
 export default function CallManager({ socket, roomId, currentUser }) {
-  const [callState, setCallState] = useState("idle"); 
-  const [callType, setCallType] = useState(null);
+  const [callState, setCallState] = useState("idle"); // idle, incoming, calling, in-call
   const [incomingCall, setIncomingCall] = useState(null);
-  const peerConnection = useRef(null);
-  const localStream = useRef(null);
+  const [callType, setCallType] = useState("video");
+  
+  const localStream = useRef();
+  const remoteVideo = useRef();
+  const peerRef = useRef();
 
   useEffect(() => {
     if (!socket) return;
 
-    // Start Call function for global access
-    window.__startCall = async (type) => {
-      setCallType(type);
-      setCallState("calling");
-      
-      localStream.current = await navigator.mediaDevices.getUserMedia({
-        video: type === "video",
-        audio: true
-      });
-
-      socket.emit("call-user", {
-        roomId,
-        callType: type,
-        from: currentUser.username
-      });
-    };
-
+    // Incoming call sunna
     socket.on("incoming-call", (data) => {
       setIncomingCall(data);
+      setCallType(data.callType);
       setCallState("incoming");
     });
 
-    socket.on("end-call", () => {
-      endCall();
+    // Jab Caller ka signal receiver accept karle
+    socket.on("call-accepted", (signal) => {
+      if (peerRef.current) {
+        peerRef.current.signal(signal);
+        setCallState("in-call");
+      }
     });
+
+    socket.on("end-call", () => {
+      handleEndCall();
+    });
+
+    // Window global method taaki CallButtons trigger kar sake
+    window.__startCall = (type) => startCall(type);
 
     return () => {
       socket.off("incoming-call");
+      socket.off("call-accepted");
       socket.off("end-call");
     };
-  }, [socket, roomId, currentUser]);
+  }, [socket, roomId]);
 
-  const endCall = () => {
+  const startCall = async (type) => {
+    setCallType(type);
+    setCallState("calling");
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: type === "video",
+      audio: true,
+    });
+    localStream.current = stream;
+
+    const peer = new Peer({
+      initiator: true,
+      trickle: false,
+      config: ICE_SERVERS,
+      stream: stream,
+    });
+
+    peer.on("signal", (data) => {
+      socket.emit("call-user", {
+        roomId: roomId,
+        signal: data,
+        callType: type,
+        from: currentUser.username,
+      });
+    });
+
+    peer.on("stream", (remoteStream) => {
+      if (remoteVideo.current) remoteVideo.current.srcObject = remoteStream;
+    });
+
+    peerRef.current = peer;
+  };
+
+  const answerCall = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: callType === "video",
+      audio: true,
+    });
+    localStream.current = stream;
+    setCallState("in-call");
+
+    const peer = new Peer({
+      initiator: false,
+      trickle: false,
+      config: ICE_SERVERS,
+      stream: stream,
+    });
+
+    peer.on("signal", (data) => {
+      socket.emit("answer-call", { roomId: roomId, signal: data });
+    });
+
+    peer.on("stream", (remoteStream) => {
+      if (remoteVideo.current) remoteVideo.current.srcObject = remoteStream;
+    });
+
+    peer.signal(incomingCall.signal);
+    peerRef.current = peer;
+  };
+
+  const handleEndCall = () => {
     if (localStream.current) {
-      localStream.current.getTracks().forEach(track => track.stop());
+      localStream.current.getTracks().forEach((track) => track.stop());
     }
+    if (peerRef.current) peerRef.current.destroy();
     setCallState("idle");
     setIncomingCall(null);
     socket.emit("end-call", { roomId });
@@ -498,22 +562,30 @@ export default function CallManager({ socket, roomId, currentUser }) {
   if (callState === "idle") return null;
 
   return (
-    <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-6 text-white">
-      <div className="w-24 h-24 bg-violet-600 rounded-full flex items-center justify-center text-4xl mb-4 animate-pulse">
-        {callType === "video" ? "🎥" : "📞"}
-      </div>
-      <h2 className="text-2xl font-bold mb-2">
-        {callState === "incoming" ? incomingCall?.from : "Calling..."}
-      </h2>
-      <p className="text-gray-400 mb-8">
-        {callState === "incoming" ? "Incoming Call" : "Waiting for answer..."}
-      </p>
-      
-      <div className="flex gap-8">
-        {callState === "incoming" && (
-          <button className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-2xl">✔️</button>
+    <div className="fixed inset-0 bg-black/95 z-[200] flex flex-col items-center justify-center p-6 text-white backdrop-blur-md">
+      <div className="relative w-full max-w-2xl aspect-video bg-gray-900 rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
+        {callState === "in-call" && (
+          <video ref={remoteVideo} autoPlay playsInline className="w-full h-full object-cover" />
         )}
-        <button onClick={endCall} className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center text-2xl">✖️</button>
+        
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <div className="w-20 h-20 bg-violet-600 rounded-full flex items-center justify-center text-3xl animate-pulse mb-4">
+               {callType === "video" ? "🎥" : "📞"}
+            </div>
+            <h2 className="text-2xl font-bold">{callState === "incoming" ? incomingCall.from : "Calling..."}</h2>
+            <p className="text-gray-400">{callState === "incoming" ? "Incoming Call" : "Connecting..."}</p>
+        </div>
+      </div>
+
+      <div className="mt-10 flex gap-6">
+        {callState === "incoming" ? (
+          <>
+            <button onClick={answerCall} className="bg-green-500 w-16 h-16 rounded-full text-2xl shadow-lg shadow-green-500/20">✔️</button>
+            <button onClick={handleEndCall} className="bg-red-500 w-16 h-16 rounded-full text-2xl shadow-lg shadow-red-500/20">✖️</button>
+          </>
+        ) : (
+          <button onClick={handleEndCall} className="bg-red-500 px-8 py-3 rounded-2xl font-bold">End Call</button>
+        )}
       </div>
     </div>
   );
