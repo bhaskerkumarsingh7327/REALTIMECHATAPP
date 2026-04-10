@@ -303,7 +303,6 @@ import cors from "cors";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import path from "path";
-import fs from "fs";
 
 import connectDB from "./db.js";
 import chatRoutes from "./routes/chat.routes.js";
@@ -315,10 +314,7 @@ dotenv.config();
 connectDB();
 
 const app = express();
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://realtimechatapp-bchat.netlify.app"
-];
+const allowedOrigins = ["http://localhost:5173", "https://realtimechatapp-bchat.netlify.app"];
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
@@ -338,39 +334,38 @@ const io = new Server(server, {
 });
 
 io.on("connection", (socket) => {
-  console.log("New socket connected:", socket.id);
+  console.log("Connected:", socket.id);
 
   socket.on("join-room", (roomId) => {
     socket.join(roomId);
-    console.log(`Socket ${socket.id} joined room: ${roomId}`);
+    console.log(`User ${socket.id} joined room ${roomId}`);
   });
 
   socket.on("send-message", ({ roomId, message }) => {
     io.in(roomId).emit("receive-message", { chatId: roomId, message });
   });
 
-  // ---- CALL SIGNALING UPDATED & FIXED ----
+  // ---- CALLING LOGIC: MUST USE socket.to(roomId) ----
+  
   socket.on("call-user", ({ roomId, signal, callType, from }) => {
-    // Room ke baki members ko call bhej raha hai
-    socket.to(roomId).emit("incoming-call", { from, signal, callType });
+    console.log("Call from:", from, "to room:", roomId);
+    // Yeh signal dusre user ki screen par popup layega
+    socket.to(roomId).emit("incoming-call", { from, signal, callType, roomId });
   });
 
   socket.on("answer-call", ({ roomId, signal }) => {
-    // CRITICAL: Signal ko wapas caller ke paas bhejna connection start karne ke liye
+    console.log("Call answered in room:", roomId);
+    // Yeh signal wapas caller ko jayega connection jodne ke liye
     socket.to(roomId).emit("call-accepted", signal);
   });
 
-  socket.on("signal", ({ roomId, signal }) => {
-    // Continuous data exchange for WebRTC
-    socket.to(roomId).emit("signal", { signal, from: socket.id });
-  });
-
   socket.on("end-call", ({ roomId }) => {
+    // Sabko notification do ki call band karo
     io.in(roomId).emit("end-call");
   });
 
   socket.on("disconnect", () => {
-    console.log("User disconnected");
+    console.log("Disconnected");
   });
 });
 

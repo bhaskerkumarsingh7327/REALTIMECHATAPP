@@ -14,7 +14,7 @@
 export default function CallButtons({ socket, roomId, currentUser }) {
   const startCall = (type) => {
     if (window.__startCall) {
-      window.__startCall(type);
+      window.__startCall(type, roomId);
     } else {
       console.warn("CallManager not mounted. Add <CallManager> to your component tree.");
     }
