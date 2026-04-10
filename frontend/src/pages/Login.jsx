@@ -200,7 +200,7 @@ import axios from "axios";
 import { useDispatch } from "react-redux";
 import { setUserData } from "../redux/userSlice";
 import { useNavigate } from "react-router-dom";
-import { serverUrl } from "../main"; // FIXED: Now importing from main.jsx
+import { serverUrl } from "../main"; 
 
 function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -234,20 +234,20 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0d1117] px-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#0d1117] px-4 py-8">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-violet-600 mb-4 text-3xl shadow-lg shadow-violet-600/30">
+        <div className="text-center mb-6 md:mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-violet-600 mb-4 text-2xl md:text-3xl shadow-lg shadow-violet-600/30">
             💬
           </div>
-          <h1 className="text-2xl font-bold text-white">Welcome back</h1>
-          <p className="text-gray-500 text-sm mt-1">Sign in to B Chat</p>
+          <h1 className="text-xl md:text-2xl font-bold text-white">Welcome back</h1>
+          <p className="text-gray-500 text-xs md:text-sm mt-1">Sign in to B Chat</p>
         </div>
 
-        <div className="bg-[#161b22] border border-white/10 rounded-2xl p-8 shadow-2xl">
-          <form onSubmit={handleLogin} className="space-y-5">
+        <div className="bg-[#161b22] border border-white/10 rounded-2xl p-6 md:p-8 shadow-2xl">
+          <form onSubmit={handleLogin} className="space-y-4 md:space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
+              <label className="block text-xs md:text-sm font-medium text-gray-300 mb-2">Email</label>
               <input
                 type="email"
                 placeholder="you@example.com"
@@ -258,7 +258,7 @@ function Login() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
+              <label className="block text-xs md:text-sm font-medium text-gray-300 mb-2">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -270,7 +270,7 @@ function Login() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 hover:text-violet-400 transition"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] md:text-xs text-gray-500 hover:text-violet-400 transition"
                 >
                   {showPassword ? "Hide" : "Show"}
                 </button>
@@ -278,8 +278,8 @@ function Login() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 px-3 py-2.5 bg-red-500/10 border border-red-500/20 rounded-xl">
-                <span className="text-red-400 text-sm">⚠ {error}</span>
+              <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-xl">
+                <span className="text-red-400 text-xs md:text-sm">⚠ {error}</span>
               </div>
             )}
 
@@ -300,7 +300,7 @@ function Login() {
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-500 mt-6">
+          <p className="text-center text-xs md:text-sm text-gray-500 mt-6">
             Don't have an account?{" "}
             <a href="/signup" className="text-violet-400 hover:text-violet-300 font-medium transition">
               Sign up
