@@ -2148,7 +2148,8 @@ function Home() {
 
   return (
     <div className="flex h-screen bg-[#0d1117] text-white overflow-hidden font-sans">
-      <div className={`w-full md:w-96 border-r border-white/10 flex-col bg-[#161b22]/50 backdrop-blur-xl ${selectedChat ? "hidden md:flex" : "flex"}`}>
+      {/* SIDEBAR: Mobile pe tab dikhega jab chat selected nahi hai */}
+      <div className={`w-full md:w-96 border-r border-white/10 flex flex-col bg-[#161b22]/50 backdrop-blur-xl ${selectedChat ? "hidden md:flex" : "flex"}`}>
         <div className="p-6 flex justify-between items-center border-b border-white/10 bg-[#161b22]/80">
           <div className="flex flex-col">
             <h1 className="text-2xl font-black bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">B Chat</h1>
@@ -2159,7 +2160,7 @@ function Home() {
                 👤
              </Link>
              <button onClick={() => setShowAddChatModal(true)} className="w-10 h-10 rounded-xl bg-violet-600 hover:bg-violet-500 flex items-center justify-center shadow-lg shadow-violet-600/20">+</button>
-             <button onClick={handleLogout} className="text-xs bg-red-500/10 text-red-500 px-3 py-1 rounded-lg border border-red-500/20 hover:bg-red-500 transition-all">Logout</button>
+             <button onClick={handleLogout} className="text-xs bg-red-500/10 text-red-500 px-2 md:px-3 py-1 rounded-lg border border-red-500/20 hover:bg-red-500 transition-all">Logout</button>
           </div>
         </div>
 
@@ -2174,7 +2175,7 @@ function Home() {
                   selectedChat?._id === chat._id ? "bg-violet-600 shadow-lg scale-[1.02]" : "hover:bg-white/5"
                 }`}
               >
-                <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-violet-500 to-fuchsia-500 flex items-center justify-center font-bold text-lg">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-violet-500 to-fuchsia-500 flex items-center justify-center font-bold text-lg flex-shrink-0">
                   {recipient?.username?.[0].toUpperCase() || "?"}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -2191,29 +2192,33 @@ function Home() {
         </div>
       </div>
 
+      {/* CHAT AREA: Mobile pe tab dikhega jab chat select hogi */}
       <div className={`flex-1 flex-col bg-[#0d1117] ${!selectedChat ? "hidden md:flex" : "flex"}`}>
         {selectedChat ? (
           <>
             <div className="p-4 bg-[#161b22]/80 backdrop-blur-md border-b border-white/10 flex justify-between items-center z-10">
               <div className="flex items-center gap-3">
+                 {/* Back button sirf mobile pe dikhega */}
                  <button 
                    onClick={() => setSelectedChat(null)} 
                    className="md:hidden text-2xl pr-2 text-violet-400 hover:text-violet-300 transition-colors"
                  >
                    ←
                  </button>
-                 <div className="w-10 h-10 rounded-full bg-violet-600/20 flex items-center justify-center text-violet-400 font-bold border border-violet-500/30">
+                 <div className="w-10 h-10 rounded-full bg-violet-600/20 flex items-center justify-center text-violet-400 font-bold border border-violet-500/30 flex-shrink-0">
                    {selectedChat.members?.find(m => m._id !== userData?._id)?.username?.[0].toUpperCase()}
                  </div>
-                 <span className="font-bold text-lg">{selectedChat.members?.find(m => m._id !== userData?._id)?.username}</span>
+                 <span className="font-bold text-lg truncate max-w-[150px] md:max-w-none">
+                   {selectedChat.members?.find(m => m._id !== userData?._id)?.username}
+                 </span>
               </div>
               <CallButtons socket={socketRef.current} roomId={selectedChat._id} currentUser={userData} />
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
               {selectedChat.messages?.map((m, i) => (
                 <div key={i} className={`flex ${m.sender === userData.username ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[70%] p-3 px-4 rounded-2xl ${
+                  <div className={`max-w-[85%] md:max-w-[70%] p-3 px-4 rounded-2xl ${
                     m.sender === userData.username ? "bg-violet-600 rounded-tr-none shadow-lg shadow-violet-600/10" : "bg-[#21262d] rounded-tl-none border border-white/5"
                   }`}>
                     <p className="text-sm">{m.text}</p>
@@ -2230,17 +2235,18 @@ function Home() {
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 />
-                <button onClick={handleSend} className="bg-violet-600 px-6 rounded-xl font-bold hover:bg-violet-500 transition-all text-sm">Send</button>
+                <button onClick={handleSend} className="bg-violet-600 px-4 md:px-6 rounded-xl font-bold hover:bg-violet-500 transition-all text-sm">Send</button>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-4 text-center">
             <div className="text-4xl mb-4">💬</div>
             <p>Select a friend to start chatting</p>
           </div>
         )}
       </div>
 
+      {/* Modal is already responsive with max-w-md */}
       {showAddChatModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-[#1c2128] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl">
@@ -2262,7 +2268,7 @@ function Home() {
                     onClick={() => handleAddChat(u._id)} 
                     className="p-4 bg-white/5 hover:bg-violet-600 rounded-2xl cursor-pointer flex items-center gap-3 transition-all"
                   >
-                    <div className="w-10 h-10 rounded-full bg-violet-500 flex items-center justify-center font-bold">
+                    <div className="w-10 h-10 rounded-full bg-violet-500 flex items-center justify-center font-bold flex-shrink-0">
                         {u.username?.[0].toUpperCase()}
                     </div>
                     <span className="font-medium">{u.username}</span>
