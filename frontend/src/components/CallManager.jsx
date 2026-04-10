@@ -464,34 +464,41 @@ export default function CallManager({ socket, roomId, currentUser }) {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on("incoming-call", (data) => {
-      if (callState !== "idle") return; // Busy check
-      setIncomingCall(data);
-      setCallType(data.callType);
-      setCallState("incoming");
-      ringtoneAudio.current.loop = true;
-      ringtoneAudio.current.play().catch(() => {});
-    });
+    const handleIncoming = (data) => {
+      setCallState((prev) => {
+        if (prev !== "idle") return prev; // Busy check
+        setIncomingCall(data);
+        setCallType(data.callType);
+        ringtoneAudio.current.loop = true;
+        ringtoneAudio.current.play().catch(() => {});
+        return "incoming";
+      });
+    };
 
-    socket.on("call-accepted", (signal) => {
+    const handleAccepted = (signal) => {
       stopAllSounds();
       if (peerRef.current) {
         peerRef.current.signal(signal);
         setCallState("in-call");
       }
-    });
+    };
 
-    socket.on("end-call", () => handleEndCall());
+    const handleEnd = () => handleEndCall();
 
-    window.__startCall = (type, targetRoomId) => startCall(type, targetRoomId);
+    socket.on("incoming-call", handleIncoming);
+    socket.on("call-accepted", handleAccepted);
+    socket.on("end-call", handleEnd);
 
     return () => {
-      socket.off("incoming-call");
-      socket.off("call-accepted");
-      socket.off("end-call");
-      stopAllSounds();
+      socket.off("incoming-call", handleIncoming);
+      socket.off("call-accepted", handleAccepted);
+      socket.off("end-call", handleEnd);
     };
-  }, [socket, callState, roomId]);
+  }, [socket]); // 👈 callState hata diya taaki events disconnect na hon re-render par
+
+  useEffect(() => {
+    window.__startCall = (type, targetRoomId) => startCall(type, targetRoomId);
+  }); // 👈 Isko alag rakha taaki memory me always latest version rahe
 
   const stopAllSounds = () => {
     ringtoneAudio.current.pause();
@@ -526,7 +533,8 @@ export default function CallManager({ socket, roomId, currentUser }) {
             roomId: activeRoomRef.current,
           signal: data,
           callType: type,
-          from: currentUser.username,
+          // Apni ID JSON format me target ko bhej rahe hain
+          from: JSON.stringify({ name: currentUser.username, id: currentUser._id }),
         });
       });
 
@@ -550,7 +558,14 @@ export default function CallManager({ socket, roomId, currentUser }) {
       });
       localStream.current = stream;
       setCallState("in-call");
-        activeRoomRef.current = incomingCall.roomId || roomId;
+
+      // Caller ki ID wapas extract kar rahe hain string se
+      let callerId = incomingCall.roomId || roomId;
+      try {
+        const parsed = JSON.parse(incomingCall.from);
+        if (parsed.id) callerId = parsed.id;
+      } catch (e) {}
+      activeRoomRef.current = callerId;
 
       const peer = new Peer({
         initiator: false,
@@ -560,7 +575,7 @@ export default function CallManager({ socket, roomId, currentUser }) {
       });
 
       peer.on("signal", (data) => {
-        socket.emit("answer-call", { roomId: incomingCall.roomId || roomId, signal: data });
+        socket.emit("answer-call", { roomId: activeRoomRef.current, signal: data });
       });
 
       peer.on("stream", (remoteStream) => {
@@ -591,7 +606,23 @@ export default function CallManager({ socket, roomId, currentUser }) {
       activeRoomRef.current = null;
   };
 
+  const endCallAction = () => {
+    if (socket && activeRoomRef.current) {
+      socket.emit("end-call", { roomId: activeRoomRef.current });
+    }
+    handleEndCall();
+  };
+
   if (callState === "idle") return null;
+
+  let displayName = "Calling...";
+  if (callState === "incoming" && incomingCall) {
+    try {
+      displayName = JSON.parse(incomingCall.from).name;
+    } catch (e) {
+      displayName = incomingCall.from;
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-black/95 z-[200] flex flex-col items-center justify-center p-6 text-white backdrop-blur-md">
@@ -603,7 +634,7 @@ export default function CallManager({ socket, roomId, currentUser }) {
               <div className="w-20 h-20 bg-violet-600 rounded-full flex items-center justify-center text-3xl animate-pulse mb-4">
                  {callType === "video" ? "🎥" : "📞"}
               </div>
-              <h2 className="text-2xl font-bold">{callState === "incoming" ? incomingCall.from : "Calling..."}</h2>
+              <h2 className="text-2xl font-bold">{displayName}</h2>
               <p className="text-gray-400">{callState === "incoming" ? "Incoming Call" : "Connecting..."}</p>
            </div>
         )}
@@ -613,10 +644,10 @@ export default function CallManager({ socket, roomId, currentUser }) {
         {callState === "incoming" ? (
           <>
             <button onClick={answerCall} className="bg-green-500 w-16 h-16 rounded-full text-2xl">✔️</button>
-              <button onClick={() => { socket.emit("end-call", { roomId: activeRoomRef.current || roomId }); handleEndCall(); }} className="bg-red-500 w-16 h-16 rounded-full text-2xl">✖️</button>
+            <button onClick={endCallAction} className="bg-red-500 w-16 h-16 rounded-full text-2xl">✖️</button>
           </>
         ) : (
-            <button onClick={() => { socket.emit("end-call", { roomId: activeRoomRef.current || roomId }); handleEndCall(); }} className="bg-red-500 px-8 py-3 rounded-2xl font-bold">End Call</button>
+            <button onClick={endCallAction} className="bg-red-500 px-8 py-3 rounded-2xl font-bold">End Call</button>
         )}
       </div>
     </div>

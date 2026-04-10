@@ -2173,10 +2173,9 @@ function Home() {
                  <button onClick={() => setSelectedChat(null)} className="md:hidden">←</button>
                  <span className="font-bold text-lg">{recipient?.username}</span>
               </div>
-              {/* FIXED: Pass the current chat _id as roomId so both users connect in the same room */}
               <CallButtons 
                 socket={socketRef.current} 
-                roomId={selectedChat?._id} 
+                roomId={recipient?._id} 
                 currentUser={userData} 
               />
             </div>
