@@ -2148,7 +2148,7 @@ function Home() {
 
   return (
     <div className="flex h-screen bg-[#0d1117] text-white overflow-hidden font-sans">
-      <div className="w-full md:w-96 border-r border-white/10 flex flex-col bg-[#161b22]/50 backdrop-blur-xl">
+      <div className={`w-full md:w-96 border-r border-white/10 flex-col bg-[#161b22]/50 backdrop-blur-xl ${selectedChat ? "hidden md:flex" : "flex"}`}>
         <div className="p-6 flex justify-between items-center border-b border-white/10 bg-[#161b22]/80">
           <div className="flex flex-col">
             <h1 className="text-2xl font-black bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">B Chat</h1>
@@ -2191,11 +2191,17 @@ function Home() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col bg-[#0d1117]">
+      <div className={`flex-1 flex-col bg-[#0d1117] ${!selectedChat ? "hidden md:flex" : "flex"}`}>
         {selectedChat ? (
           <>
             <div className="p-4 bg-[#161b22]/80 backdrop-blur-md border-b border-white/10 flex justify-between items-center z-10">
               <div className="flex items-center gap-3">
+                 <button 
+                   onClick={() => setSelectedChat(null)} 
+                   className="md:hidden text-2xl pr-2 text-violet-400 hover:text-violet-300 transition-colors"
+                 >
+                   ←
+                 </button>
                  <div className="w-10 h-10 rounded-full bg-violet-600/20 flex items-center justify-center text-violet-400 font-bold border border-violet-500/30">
                    {selectedChat.members?.find(m => m._id !== userData?._id)?.username?.[0].toUpperCase()}
                  </div>
