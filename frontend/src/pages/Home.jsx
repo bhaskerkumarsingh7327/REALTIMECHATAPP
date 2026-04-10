@@ -2044,7 +2044,6 @@ function Home() {
   const socketRef = useRef();
   const messagesEndRef = useRef(null);
 
-  // Messages auto-scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -2099,26 +2098,65 @@ function Home() {
     } catch (err) { console.error(err); }
   };
 
+  const handleSearch = async (val) => {
+    setSearchQuery(val);
+    if (val.trim().length > 0) {
+      try {
+        const res = await axios.get(`${serverUrl}/api/chat/search?query=${val}&myId=${userData._id}`);
+        setSearchResults(res.data || []);
+      } catch (err) { console.error(err); }
+    } else { setSearchResults([]); }
+  };
+
+  const handleAddChat = async (recipientId) => {
+    try {
+      const res = await axios.post(`${serverUrl}/api/chat`, { myId: userData._id, recipientId });
+      setChats([res.data, ...chats]);
+      setSelectedChat(res.data);
+      setShowAddChatModal(false);
+    } catch (err) { console.error(err); }
+  };
+
   return (
-    // FIX: inset-0 + h-[100dvh] ensures full height on Android/OnePlus
     <div className="fixed inset-0 flex h-[100dvh] w-full bg-[#0d1117] text-white overflow-hidden font-sans">
       
       {/* SIDEBAR */}
-      <div className={`w-full md:w-96 border-r border-white/10 flex flex-col bg-[#161b22]/50 ${selectedChat ? "hidden md:flex" : "flex"} h-full`}>
-        <div className="p-6 flex justify-between items-center border-b border-white/10 flex-shrink-0">
-          <h1 className="text-2xl font-black text-violet-400">B Chat</h1>
+      <div className={`w-full md:w-96 border-r border-white/10 flex flex-col bg-[#161b22]/50 backdrop-blur-xl ${selectedChat ? "hidden md:flex" : "flex"} h-full`}>
+        <div className="p-6 flex justify-between items-center border-b border-white/10 flex-shrink-0 bg-[#161b22]/80">
+          <div className="flex flex-col">
+            <h1 className="text-2xl font-black bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">B Chat</h1>
+            <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Realtime</span>
+          </div>
           <div className="flex gap-2">
-             <Link to="/profile" className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">👤</Link>
-             <button onClick={() => setShowAddChatModal(true)} className="w-10 h-10 rounded-xl bg-violet-600">+</button>
-             <button onClick={() => { dispatch(clearUserData()); navigate("/login"); }} className="text-xs bg-red-500/10 text-red-500 px-3 py-1 rounded-lg">Logout</button>
+             <Link to="/profile" className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">👤</Link>
+             <button onClick={() => setShowAddChatModal(true)} className="w-10 h-10 rounded-xl bg-violet-600 hover:bg-violet-500 shadow-lg shadow-violet-600/20 font-bold">+</button>
+             <button onClick={() => { dispatch(clearUserData()); navigate("/login"); }} className="text-xs bg-red-500/10 text-red-500 px-3 py-1 rounded-lg border border-red-500/20 hover:bg-red-500 hover:text-white transition-all">Logout</button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto">
-          {chats.map((chat) => (
-            <div key={chat._id} onClick={() => setSelectedChat(chat)} className={`mx-3 my-1 p-4 rounded-2xl cursor-pointer ${selectedChat?._id === chat._id ? "bg-violet-600" : "hover:bg-white/5"}`}>
-              <p className="font-semibold">{chat.members?.find((m) => m._id !== userData?._id)?.username || "User"}</p>
-            </div>
-          ))}
+
+        <div className="flex-1 overflow-y-auto py-2">
+          {chats.map((chat) => {
+            const recipient = chat.members?.find((m) => m._id !== userData?._id);
+            return (
+              <div 
+                key={chat._id} 
+                onClick={() => setSelectedChat(chat)} 
+                className={`mx-3 my-1 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-4 ${
+                  selectedChat?._id === chat._id ? "bg-violet-600 shadow-lg scale-[1.02]" : "hover:bg-white/5"
+                }`}
+              >
+                <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-violet-500 to-fuchsia-500 flex items-center justify-center font-bold text-lg flex-shrink-0 border border-white/10">
+                  {recipient?.username?.[0].toUpperCase() || "?"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold truncate">{recipient?.username || "User"}</p>
+                  <p className="text-xs opacity-60 truncate">
+                    {chat.messages?.length > 0 ? chat.messages[chat.messages.length - 1].text : "Start chatting..."}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -2126,20 +2164,29 @@ function Home() {
       <div className={`flex-1 flex flex-col bg-[#0d1117] h-full ${!selectedChat ? "hidden md:flex" : "flex"}`}>
         {selectedChat ? (
           <>
-            {/* Header - Fixed at top */}
-            <div className="p-4 bg-[#161b22]/80 border-b border-white/10 flex justify-between items-center flex-shrink-0">
+            {/* Header */}
+            <div className="p-4 bg-[#161b22]/80 backdrop-blur-md border-b border-white/10 flex justify-between items-center flex-shrink-0 z-10">
               <div className="flex items-center gap-3">
-                 <button onClick={() => setSelectedChat(null)} className="md:hidden text-violet-400">←</button>
-                 <span className="font-bold">{selectedChat.members?.find(m => m._id !== userData?._id)?.username}</span>
+                 <button onClick={() => setSelectedChat(null)} className="md:hidden text-violet-400 text-xl pr-2">←</button>
+                 <div className="w-10 h-10 rounded-full bg-violet-600/20 flex items-center justify-center text-violet-400 font-bold border border-violet-500/30">
+                    {selectedChat.members?.find(m => m._id !== userData?._id)?.username?.[0].toUpperCase()}
+                 </div>
+                 <span className="font-bold text-lg truncate">
+                   {selectedChat.members?.find(m => m._id !== userData?._id)?.username}
+                 </span>
               </div>
               <CallButtons socket={socketRef.current} roomId={selectedChat._id} currentUser={userData} />
             </div>
 
-            {/* Messages - Scrollable area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 min-h-0">
               {selectedChat.messages?.map((m, i) => (
                 <div key={i} className={`flex ${m.sender === userData.username ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[85%] p-3 px-4 rounded-2xl ${m.sender === userData.username ? "bg-violet-600" : "bg-[#21262d]"}`}>
+                  <div className={`max-w-[85%] md:max-w-[70%] p-3 px-4 rounded-2xl shadow-md ${
+                    m.sender === userData.username 
+                    ? "bg-violet-600 rounded-tr-none shadow-violet-600/10" 
+                    : "bg-[#21262d] rounded-tl-none border border-white/5"
+                  }`}>
                     <p className="text-sm">{m.text}</p>
                   </div>
                 </div>
@@ -2147,43 +2194,56 @@ function Home() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Box - LOCKED at the bottom of the visible screen */}
-            <div className="p-4 bg-[#161b22] border-t border-white/10 flex gap-2 flex-shrink-0">
+            {/* Input Box */}
+            <div className="p-4 bg-[#161b22]/50 backdrop-blur-md border-t border-white/10 flex gap-2 flex-shrink-0">
                 <input 
-                  className="flex-1 bg-white/5 border border-white/10 p-3 rounded-xl outline-none text-sm" 
-                  placeholder="Type message..." 
+                  className="flex-1 bg-white/5 border border-white/10 p-3 rounded-xl outline-none focus:border-violet-500 transition-all text-sm" 
+                  placeholder="Type a message..." 
                   value={message} 
                   onChange={(e) => setMessage(e.target.value)} 
                   onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 />
-                <button onClick={handleSend} className="bg-violet-600 px-5 rounded-xl font-bold">Send</button>
+                <button onClick={handleSend} className="bg-violet-600 px-6 rounded-xl font-bold hover:bg-violet-500 transition-all shadow-lg shadow-violet-600/20">Send</button>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-500">Select a chat</div>
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-4 text-center">
+            <div className="text-5xl mb-4 opacity-20">💬</div>
+            <p className="font-medium">Select a friend to start chatting</p>
+          </div>
         )}
       </div>
 
-      {/* Modals & Call Overlay */}
+      {/* MODAL */}
       {showAddChatModal && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
-           {/* Modal Content - same as yours but ensure it's above everything */}
-           <div className="bg-[#1c2128] w-full max-w-md rounded-3xl p-6">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
+          <div className="bg-[#1c2128] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl scale-in-center">
+            <div className="p-6 border-b border-white/5">
+              <h2 className="text-xl font-bold">Search Users</h2>
+            </div>
+            <div className="p-6">
               <input 
-                className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none" 
-                placeholder="Search..." 
+                autoFocus
+                className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none focus:border-violet-500 transition-all" 
+                placeholder="Search by username..." 
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
               />
-              <div className="mt-4 max-h-60 overflow-y-auto">
+              <div className="mt-4 max-h-60 overflow-y-auto space-y-2">
                 {searchResults.map((u) => (
-                  <div key={u._id} onClick={() => handleAddChat(u._id)} className="p-4 hover:bg-violet-600 rounded-2xl cursor-pointer">
-                    {u.username}
+                  <div key={u._id} onClick={() => handleAddChat(u._id)} className="p-4 bg-white/5 hover:bg-violet-600 rounded-2xl cursor-pointer flex items-center gap-3 transition-all">
+                    <div className="w-10 h-10 rounded-full bg-violet-500 flex items-center justify-center font-bold">
+                        {u.username?.[0].toUpperCase()}
+                    </div>
+                    <span className="font-medium">{u.username}</span>
                   </div>
                 ))}
               </div>
-              <button onClick={() => setShowAddChatModal(false)} className="mt-4 text-gray-400">Close</button>
-           </div>
+            </div>
+            <div className="p-4 flex justify-end">
+              <button onClick={() => { setShowAddChatModal(false); setSearchResults([]); }} className="text-sm font-bold text-gray-400 hover:text-white px-4 py-2 transition-colors">Cancel</button>
+            </div>
+          </div>
         </div>
       )}
 
