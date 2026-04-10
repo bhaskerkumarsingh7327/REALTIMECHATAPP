@@ -439,7 +439,6 @@
 //   activeBtn: { background: "#f59e0b", color: "#fff" },
 // };
 import React, { useEffect, useRef, useState } from "react";
-import Peer from "simple-peer";
 
 const ICE_SERVERS = {
   iceServers: [
@@ -452,14 +451,40 @@ export default function CallManager({ socket, roomId, currentUser }) {
   const [callState, setCallState] = useState("idle"); 
   const [incomingCall, setIncomingCall] = useState(null);
   const [callType, setCallType] = useState("video");
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+  const [facingMode, setFacingMode] = useState("user"); // Front ya Back camera ke liye
+  const [callDuration, setCallDuration] = useState(0); // Timer ke liye
   
   const localStream = useRef(null);
   const remoteVideo = useRef();
+  const localVideo = useRef(null);
   const peerRef = useRef(null);
   const activeRoomRef = useRef(null);
+  const pendingCandidates = useRef([]); // Connection stable rakhne ke liye buffer
+  const timerRef = useRef(null);
   
   const ringtoneAudio = useRef(new Audio("/ringing.mp3"));
   const dialingAudio = useRef(new Audio("/dialing.mp3"));
+
+  useEffect(() => {
+    if (!socket) return;
+
+    // Call Timer Loop
+    if (callState === "in-call") {
+      timerRef.current = setInterval(() => setCallDuration(prev => prev + 1), 1000);
+    } else {
+      clearInterval(timerRef.current);
+      setCallDuration(0);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [callState, socket]);
+
+  const formatTime = (s) => {
+    const m = Math.floor(s / 60).toString().padStart(2, "0");
+    const sec = (s % 60).toString().padStart(2, "0");
+    return `${m}:${sec}`;
+  };
 
   useEffect(() => {
     if (!socket) return;
@@ -475,23 +500,62 @@ export default function CallManager({ socket, roomId, currentUser }) {
       });
     };
 
-    const handleAccepted = (signal) => {
+    const handleAccepted = async (signal) => {
       stopAllSounds();
       if (peerRef.current) {
-        peerRef.current.signal(signal);
-        setCallState("in-call");
+        try {
+          await peerRef.current.setRemoteDescription(new RTCSessionDescription(signal));
+          setCallState("in-call");
+          pendingCandidates.current.forEach(c => peerRef.current.addIceCandidate(new RTCIceCandidate(c)));
+          pendingCandidates.current = [];
+          
+          // Call connect hone ke baad Renegotiation on karo (Audio -> Video switch ke liye)
+          peerRef.current.onnegotiationneeded = async () => {
+            try {
+              const offer = await peerRef.current.createOffer();
+              await peerRef.current.setLocalDescription(offer);
+              socket.emit("webrtc-signal", { roomId: activeRoomRef.current, signal: peerRef.current.localDescription });
+            } catch(e) {}
+          };
+        } catch(e) { console.error(e); }
       }
     };
 
-    const handleEnd = () => handleEndCall();
+    const handleIce = async (candidate) => {
+      if (peerRef.current && peerRef.current.remoteDescription) {
+        try { await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {}
+      } else {
+        pendingCandidates.current.push(candidate);
+      }
+    };
+
+    const handleWebRTCSignal = async (signal) => {
+      if (!peerRef.current) return;
+      try {
+        if (signal.type === "offer") {
+          await peerRef.current.setRemoteDescription(new RTCSessionDescription(signal));
+          const answer = await peerRef.current.createAnswer();
+          await peerRef.current.setLocalDescription(answer);
+          socket.emit("webrtc-signal", { roomId: activeRoomRef.current, signal: peerRef.current.localDescription });
+        } else if (signal.type === "answer") {
+          await peerRef.current.setRemoteDescription(new RTCSessionDescription(signal));
+        }
+      } catch(e) { console.error("Negotiation err:", e); }
+    };
+
+    const handleEnd = () => handleEndCall(false);
 
     socket.on("incoming-call", handleIncoming);
     socket.on("call-accepted", handleAccepted);
+    socket.on("webrtc-ice", handleIce);
+    socket.on("webrtc-signal", handleWebRTCSignal);
     socket.on("end-call", handleEnd);
 
     return () => {
       socket.off("incoming-call", handleIncoming);
       socket.off("call-accepted", handleAccepted);
+      socket.off("webrtc-ice", handleIce);
+      socket.off("webrtc-signal", handleWebRTCSignal);
       socket.off("end-call", handleEnd);
     };
   }, [socket]); // 👈 callState hata diya taaki events disconnect na hon re-render par
@@ -507,45 +571,59 @@ export default function CallManager({ socket, roomId, currentUser }) {
     dialingAudio.current.currentTime = 0;
   };
 
+  // Setup Peer connection function
+  const setupPeer = () => {
+    const pc = new RTCPeerConnection(ICE_SERVERS);
+    pc.onicecandidate = (e) => {
+      if (e.candidate && socket && activeRoomRef.current) {
+        socket.emit("webrtc-ice", { roomId: activeRoomRef.current, candidate: e.candidate });
+      }
+    };
+    pc.ontrack = (e) => {
+      if (remoteVideo.current) remoteVideo.current.srcObject = e.streams[0];
+      
+      // Agar beech call me video track receive hota hai toh automatically video UI pe switch karo
+      if (e.track.kind === "video") {
+        setCallType("video");
+        setIsVideoOff(false);
+      }
+    };
+    if (localStream.current) {
+      localStream.current.getTracks().forEach((track) => pc.addTrack(track, localStream.current));
+    }
+    peerRef.current = pc;
+    return pc;
+  };
+
   const startCall = async (type, targetRoomId) => {
     setCallType(type);
     setCallState("calling");
-      activeRoomRef.current = targetRoomId || roomId;
+    activeRoomRef.current = targetRoomId || roomId;
     dialingAudio.current.loop = true;
     dialingAudio.current.play().catch(() => {});
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: type === "video",
+        video: type === "video" ? { facingMode } : false,
         audio: true,
       });
       localStream.current = stream;
+      if (localVideo.current) localVideo.current.srcObject = stream;
 
-      const peer = new Peer({
-        initiator: true,
-        trickle: false,
-        config: ICE_SERVERS,
-        stream: stream,
+      const pc = setupPeer();
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      socket.emit("call-user", {
+        roomId: activeRoomRef.current,
+        signal: offer,
+        callType: type,
+        from: JSON.stringify({ name: currentUser.username, id: currentUser._id }),
       });
-
-      peer.on("signal", (data) => {
-        socket.emit("call-user", {
-            roomId: activeRoomRef.current,
-          signal: data,
-          callType: type,
-          // Apni ID JSON format me target ko bhej rahe hain
-          from: JSON.stringify({ name: currentUser.username, id: currentUser._id }),
-        });
-      });
-
-      peer.on("stream", (remoteStream) => {
-        if (remoteVideo.current) remoteVideo.current.srcObject = remoteStream;
-      });
-
-      peerRef.current = peer;
     } catch (err) {
       console.error("Mic/Camera error:", err);
-      handleEndCall();
+      alert("Camera or Microphone access denied! Please check browser permissions.");
+      handleEndCall(true);
     }
   };
 
@@ -553,13 +631,13 @@ export default function CallManager({ socket, roomId, currentUser }) {
     stopAllSounds();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: callType === "video",
+        video: callType === "video" ? { facingMode } : false,
         audio: true,
       });
       localStream.current = stream;
+      if (localVideo.current) localVideo.current.srcObject = stream;
       setCallState("in-call");
 
-      // Caller ki ID wapas extract kar rahe hain string se
       let callerId = incomingCall.roomId || roomId;
       try {
         const parsed = JSON.parse(incomingCall.from);
@@ -567,55 +645,112 @@ export default function CallManager({ socket, roomId, currentUser }) {
       } catch (e) {}
       activeRoomRef.current = callerId;
 
-      const peer = new Peer({
-        initiator: false,
-        trickle: false,
-        config: ICE_SERVERS,
-        stream: stream,
-      });
+      const pc = setupPeer();
+      await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.signal));
+      pendingCandidates.current.forEach(c => pc.addIceCandidate(new RTCIceCandidate(c)));
+      pendingCandidates.current = [];
 
-      peer.on("signal", (data) => {
-        socket.emit("answer-call", { roomId: activeRoomRef.current, signal: data });
-      });
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
 
-      peer.on("stream", (remoteStream) => {
-        if (remoteVideo.current) remoteVideo.current.srcObject = remoteStream;
-      });
+      socket.emit("answer-call", { roomId: activeRoomRef.current, signal: answer });
 
-      peer.signal(incomingCall.signal);
-      peerRef.current = peer;
+      // Answer karne ke baad Renegotiation on karo
+      pc.onnegotiationneeded = async () => {
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit("webrtc-signal", { roomId: activeRoomRef.current, signal: pc.localDescription });
+        } catch(e) {}
+      };
     } catch (err) {
       console.error("Answer error:", err);
-      handleEndCall();
+      alert("Camera or Microphone access denied! Please check browser permissions.");
+      handleEndCall(true);
     }
   };
 
-  const handleEndCall = () => {
+  const handleEndCall = (emit = false) => {
     stopAllSounds();
-    // STOP MIC AND CAMERA
     if (localStream.current) {
       localStream.current.getTracks().forEach((track) => track.stop());
       localStream.current = null;
     }
     if (peerRef.current) {
-      peerRef.current.destroy();
+      peerRef.current.close();
       peerRef.current = null;
     }
+    if (emit && socket && activeRoomRef.current) {
+      socket.emit("end-call", { roomId: activeRoomRef.current });
+    }
+    pendingCandidates.current = [];
     setCallState("idle");
     setIncomingCall(null);
       activeRoomRef.current = null;
+    setIsMuted(false);
+    setIsVideoOff(false);
   };
 
-  const endCallAction = () => {
-    if (socket && activeRoomRef.current) {
-      socket.emit("end-call", { roomId: activeRoomRef.current });
+  const toggleMute = () => {
+    if (localStream.current) {
+      const audioTrack = localStream.current.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsMuted(!audioTrack.enabled);
+      }
     }
-    handleEndCall();
+  };
+
+  const toggleVideo = async () => {
+    if (!localStream.current) return;
+    const videoTrack = localStream.current.getVideoTracks()[0];
+    
+    if (videoTrack) {
+      videoTrack.enabled = !videoTrack.enabled;
+      setIsVideoOff(!videoTrack.enabled);
+    } else {
+      // WhatsApp jaisa Audio se Video me Upgrade logic
+      try {
+        const vs = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
+        const newVideoTrack = vs.getVideoTracks()[0];
+        localStream.current.addTrack(newVideoTrack);
+        
+        if (localVideo.current) localVideo.current.srcObject = localStream.current;
+        if (peerRef.current) peerRef.current.addTrack(newVideoTrack, localStream.current);
+        
+        setCallType("video");
+        setIsVideoOff(false);
+      } catch (err) { alert("Camera access denied!"); }
+    }
+  };
+
+  const flipCamera = async () => {
+    if (callType !== "video" || !localStream.current) return;
+    const newMode = facingMode === "user" ? "environment" : "user";
+    setFacingMode(newMode);
+    try {
+      const vs = await navigator.mediaDevices.getUserMedia({ video: { facingMode: newMode } });
+      const newTrack = vs.getVideoTracks()[0];
+      const oldTrack = localStream.current.getVideoTracks()[0];
+      
+      if (oldTrack) {
+        oldTrack.stop();
+        localStream.current.removeTrack(oldTrack);
+      }
+      
+      localStream.current.addTrack(newTrack);
+      if (localVideo.current) localVideo.current.srcObject = localStream.current;
+      
+      if (peerRef.current) {
+        const sender = peerRef.current.getSenders().find(s => s.track && s.track.kind === "video");
+        if (sender) sender.replaceTrack(newTrack);
+      }
+    } catch (e) { console.error(e); }
   };
 
   if (callState === "idle") return null;
 
-  let displayName = "Calling...";
+  let displayName = "Unknown";
   if (callState === "incoming" && incomingCall) {
     try {
       displayName = JSON.parse(incomingCall.from).name;
@@ -625,29 +760,52 @@ export default function CallManager({ socket, roomId, currentUser }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/95 z-[200] flex flex-col items-center justify-center p-6 text-white backdrop-blur-md">
-      <div className="relative w-full max-w-2xl aspect-video bg-gray-900 rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
-        <video ref={remoteVideo} autoPlay playsInline className="w-full h-full object-cover" />
+    <div className="fixed inset-0 bg-black/95 z-[200] flex flex-col items-center justify-center p-4 md:p-10 text-white backdrop-blur-lg">
+      <div className="relative w-full max-w-4xl aspect-video bg-[#111] rounded-3xl overflow-hidden border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)]">
+        <video ref={remoteVideo} autoPlay playsInline className={`w-full h-full object-cover ${callType === "video" && callState === "in-call" ? "block" : "hidden"}`} />
         
-        {callState !== "in-call" && (
-           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
-              <div className="w-20 h-20 bg-violet-600 rounded-full flex items-center justify-center text-3xl animate-pulse mb-4">
+        {callType === "video" && (
+           <video ref={localVideo} autoPlay muted playsInline className={`absolute bottom-4 right-4 md:bottom-6 md:right-6 w-28 h-40 md:w-36 md:h-52 bg-black/50 border-2 border-white/20 rounded-2xl object-cover shadow-2xl transition-all ${callState === "in-call" ? "opacity-100" : "opacity-0"}`} />
+        )}
+
+        {(callState !== "in-call" || callType === "audio") && (
+           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-md">
+              <div className="w-24 h-24 bg-violet-600/30 border border-violet-500/50 shadow-[0_0_30px_rgba(139,92,246,0.3)] rounded-full flex items-center justify-center text-4xl animate-pulse mb-6">
                  {callType === "video" ? "🎥" : "📞"}
               </div>
-              <h2 className="text-2xl font-bold">{displayName}</h2>
-              <p className="text-gray-400">{callState === "incoming" ? "Incoming Call" : "Connecting..."}</p>
+              <h2 className="text-3xl md:text-4xl font-bold tracking-wide">{callState === "incoming" ? displayName : (callState === "in-call" ? displayName : "Calling...")}</h2>
+              <p className="text-gray-300 mt-2 text-lg">{callState === "incoming" ? "Incoming Call" : (callState === "in-call" ? formatTime(callDuration) : "Waiting for answer...")}</p>
            </div>
         )}
       </div>
 
-      <div className="mt-10 flex gap-6">
+      <div className="mt-10 flex gap-4 md:gap-6">
         {callState === "incoming" ? (
           <>
-            <button onClick={answerCall} className="bg-green-500 w-16 h-16 rounded-full text-2xl">✔️</button>
-            <button onClick={endCallAction} className="bg-red-500 w-16 h-16 rounded-full text-2xl">✖️</button>
+            <button onClick={answerCall} className="bg-green-500 hover:bg-green-400 w-16 h-16 rounded-full text-2xl shadow-lg shadow-green-500/30 transition-transform hover:scale-110 flex items-center justify-center">📞</button>
+            <button onClick={() => handleEndCall(true)} className="bg-red-500 hover:bg-red-400 w-16 h-16 rounded-full text-2xl shadow-lg shadow-red-500/30 transition-transform hover:scale-110 flex items-center justify-center">✖️</button>
           </>
         ) : (
-            <button onClick={endCallAction} className="bg-red-500 px-8 py-3 rounded-2xl font-bold">End Call</button>
+          <>
+            {callState === "in-call" && (
+              <>
+                <button onClick={toggleMute} className={`w-14 h-14 md:w-16 md:h-16 rounded-full text-2xl shadow-lg transition-transform hover:scale-110 flex items-center justify-center ${isMuted ? 'bg-gray-600 text-gray-300' : 'bg-white/20 hover:bg-white/30'}`}>
+                  {isMuted ? "🔇" : "🎤"}
+                </button>
+                
+                <button onClick={toggleVideo} className={`w-14 h-14 md:w-16 md:h-16 rounded-full text-2xl shadow-lg transition-transform hover:scale-110 flex items-center justify-center ${(isVideoOff || callType === "audio") ? 'bg-gray-600 text-gray-300' : 'bg-white/20 hover:bg-white/30'}`}>
+                  {(isVideoOff || callType === "audio") ? "🚫" : "📷"}
+                </button>
+
+                {callType === "video" && !isVideoOff && (
+                  <button onClick={flipCamera} className="w-14 h-14 md:w-16 md:h-16 rounded-full text-2xl shadow-lg transition-transform hover:scale-110 flex items-center justify-center bg-white/20 hover:bg-white/30">
+                    🔄
+                  </button>
+                )}
+              </>
+            )}
+            <button onClick={() => handleEndCall(true)} className="bg-red-500 hover:bg-red-400 w-14 h-14 md:w-16 md:h-16 rounded-full text-2xl shadow-lg shadow-red-500/30 transition-transform hover:scale-110 flex items-center justify-center">📵</button>
+          </>
         )}
       </div>
     </div>
