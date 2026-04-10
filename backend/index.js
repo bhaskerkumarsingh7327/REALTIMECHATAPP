@@ -206,6 +206,96 @@
 //   console.log(`Server running on port ${PORT}`);
 // });
 //  claude code 
+// import express from "express";
+// import http from "http";
+// import { Server } from "socket.io";
+// import cors from "cors";
+// import dotenv from "dotenv";
+// import cookieParser from "cookie-parser";
+// import path from "path";
+// import connectDB from "./config/db.js";
+// import chatRoutes from "./routes/chat.routes.js";
+// import authRouter from "./routes/auth.routes.js";
+// import userRouter from "./routes/user.routes.js";
+// import mediaRouter from "./routes/media.routes.js";
+
+// dotenv.config();
+// connectDB();
+
+// const app = express();
+
+// const allowedOrigins = [
+//   "http://localhost:5173", 
+//   "http://127.0.0.1:5173", 
+//   "http://localhost:5174", 
+//   "https://realtimechatapp-frontend-7uv3.onrender.com" 
+// ];
+
+// app.use(cors({
+//   origin: function (origin, callback) {
+//     if (!origin || allowedOrigins.includes(origin)) {
+//       callback(null, true);
+//     } else {
+//       callback(new Error("Not allowed by CORS"));
+//     }
+//   },
+//   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//   credentials: true,
+//   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
+// }));
+
+// app.use(express.json());
+// app.use(cookieParser());
+// app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+// app.get("/", (req, res) => res.send("Backend is running 🚀"));
+// app.use("/api/chat", chatRoutes);
+// app.use("/api/auth", authRouter);
+// app.use("/api/user", userRouter);
+// app.use("/api/media", mediaRouter);
+
+// const server = http.createServer(app);
+// const io = new Server(server, {
+//   cors: { origin: allowedOrigins, methods: ["GET", "POST"], credentials: true },
+//   transports: ['websocket', 'polling']
+// });
+
+// io.on("connection", (socket) => {
+//   console.log("New socket connected:", socket.id);
+
+//   socket.on("join-room", (roomId) => {
+//     socket.join(roomId);
+//     console.log(`Socket ${socket.id} joined room: ${roomId}`);
+//   });
+
+//   socket.on("send-message", ({ roomId, message }) => {
+//     io.in(roomId).emit("receive-message", { chatId: roomId, message });
+//   });
+
+//   // ---- CALL SIGNALING FIXED ----
+//   socket.on("call-user", ({ roomId, signal, callType, from }) => {
+//     socket.to(roomId).emit("incoming-call", { from, signal, callType });
+//   });
+
+//   socket.on("answer-call", ({ roomId, signal }) => {
+//     socket.to(roomId).emit("call-accepted", signal);
+//   });
+
+//   socket.on("signal", ({ roomId, signal }) => {
+//     socket.to(roomId).emit("signal", { signal, from: socket.id });
+//   });
+
+//   socket.on("end-call", ({ roomId }) => {
+//     if (roomId) io.in(roomId).emit("end-call");
+//   });
+
+//   socket.on("disconnect", () => {
+//     console.log("Socket disconnected:", socket.id);
+//   });
+// });
+
+// const PORT = process.env.PORT || 8000;
+// server.listen(PORT, () => console.log(`Server running on port ${PORT} 🚀`));
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
@@ -213,7 +303,9 @@ import cors from "cors";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import path from "path";
-import connectDB from "./config/db.js";
+import fs from "fs";
+
+import connectDB from "./db.js";
 import chatRoutes from "./routes/chat.routes.js";
 import authRouter from "./routes/auth.routes.js";
 import userRouter from "./routes/user.routes.js";
@@ -223,27 +315,12 @@ dotenv.config();
 connectDB();
 
 const app = express();
-
 const allowedOrigins = [
-  "http://localhost:5173", 
-  "http://127.0.0.1:5173", 
-  "http://localhost:5174", 
-  "https://realtimechatapp-frontend-7uv3.onrender.com" 
+  "http://localhost:5173",
+  "https://realtimechatapp-bchat.netlify.app"
 ];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
-}));
-
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
@@ -272,27 +349,30 @@ io.on("connection", (socket) => {
     io.in(roomId).emit("receive-message", { chatId: roomId, message });
   });
 
-  // ---- CALL SIGNALING FIXED ----
+  // ---- CALL SIGNALING UPDATED & FIXED ----
   socket.on("call-user", ({ roomId, signal, callType, from }) => {
+    // Room ke baki members ko call bhej raha hai
     socket.to(roomId).emit("incoming-call", { from, signal, callType });
   });
 
   socket.on("answer-call", ({ roomId, signal }) => {
+    // CRITICAL: Signal ko wapas caller ke paas bhejna connection start karne ke liye
     socket.to(roomId).emit("call-accepted", signal);
   });
 
   socket.on("signal", ({ roomId, signal }) => {
+    // Continuous data exchange for WebRTC
     socket.to(roomId).emit("signal", { signal, from: socket.id });
   });
 
   socket.on("end-call", ({ roomId }) => {
-    if (roomId) io.in(roomId).emit("end-call");
+    io.in(roomId).emit("end-call");
   });
 
   socket.on("disconnect", () => {
-    console.log("Socket disconnected:", socket.id);
+    console.log("User disconnected");
   });
 });
 
 const PORT = process.env.PORT || 8000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT} 🚀`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

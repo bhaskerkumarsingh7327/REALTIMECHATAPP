@@ -2052,18 +2052,14 @@ function Home() {
     scrollToBottom();
   }, [selectedChat?.messages]);
 
-  const fetchChats = async () => {
-    if (!userData?._id) return;
-    try {
-      const res = await axios.get(`${serverUrl}/api/chat?userId=${userData._id}`);
-      setChats(Array.isArray(res.data) ? res.data : []);
-    } catch (err) { console.error(err); }
-  };
-
   useEffect(() => {
     if (!userData) return;
+
     socketRef.current = io(SOCKET_URL, { transports: ["websocket"] });
+    
+    // FIX: Personal room join karna notifications ke liye
     socketRef.current.emit("join-room", userData._id);
+
     fetchChats();
 
     socketRef.current.on("receive-message", (data) => {
@@ -2081,11 +2077,20 @@ function Home() {
     return () => { if (socketRef.current) socketRef.current.disconnect(); };
   }, [userData]);
 
+  // Selected chat room join karna messaging ke liye
   useEffect(() => {
     if (selectedChat?._id && socketRef.current) {
       socketRef.current.emit("join-room", selectedChat._id);
     }
   }, [selectedChat?._id]);
+
+  const fetchChats = async () => {
+    if (!userData?._id) return;
+    try {
+      const res = await axios.get(`${serverUrl}/api/chat?userId=${userData._id}`);
+      setChats(Array.isArray(res.data) ? res.data : []);
+    } catch (err) { console.error(err); }
+  };
 
   const handleSend = async () => {
     if (!message.trim() || !selectedChat) return;
@@ -2119,8 +2124,6 @@ function Home() {
 
   return (
     <div className="fixed inset-0 flex h-[100dvh] w-full bg-[#0d1117] text-white overflow-hidden font-sans">
-      
-      {/* SIDEBAR */}
       <div className={`w-full md:w-96 border-r border-white/10 flex flex-col bg-[#161b22]/50 backdrop-blur-xl ${selectedChat ? "hidden md:flex" : "flex"} h-full`}>
         <div className="p-6 flex justify-between items-center border-b border-white/10 flex-shrink-0 bg-[#161b22]/80">
           <div className="flex flex-col">
@@ -2138,13 +2141,7 @@ function Home() {
           {chats.map((chat) => {
             const recipient = chat.members?.find((m) => m._id !== userData?._id);
             return (
-              <div 
-                key={chat._id} 
-                onClick={() => setSelectedChat(chat)} 
-                className={`mx-3 my-1 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-4 ${
-                  selectedChat?._id === chat._id ? "bg-violet-600 shadow-lg scale-[1.02]" : "hover:bg-white/5"
-                }`}
-              >
+              <div key={chat._id} onClick={() => setSelectedChat(chat)} className={`mx-3 my-1 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-4 ${selectedChat?._id === chat._id ? "bg-violet-600 shadow-lg scale-[1.02]" : "hover:bg-white/5"}`}>
                 <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-violet-500 to-fuchsia-500 flex items-center justify-center font-bold text-lg flex-shrink-0 border border-white/10">
                   {recipient?.username?.[0].toUpperCase() || "?"}
                 </div>
@@ -2160,11 +2157,9 @@ function Home() {
         </div>
       </div>
 
-      {/* CHAT AREA */}
       <div className={`flex-1 flex flex-col bg-[#0d1117] h-full ${!selectedChat ? "hidden md:flex" : "flex"}`}>
         {selectedChat ? (
           <>
-            {/* Header */}
             <div className="p-4 bg-[#161b22]/80 backdrop-blur-md border-b border-white/10 flex justify-between items-center flex-shrink-0 z-10">
               <div className="flex items-center gap-3">
                  <button onClick={() => setSelectedChat(null)} className="md:hidden text-violet-400 text-xl pr-2">←</button>
@@ -2178,15 +2173,10 @@ function Home() {
               <CallButtons socket={socketRef.current} roomId={selectedChat._id} currentUser={userData} />
             </div>
 
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 min-h-0">
               {selectedChat.messages?.map((m, i) => (
                 <div key={i} className={`flex ${m.sender === userData.username ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[85%] md:max-w-[70%] p-3 px-4 rounded-2xl shadow-md ${
-                    m.sender === userData.username 
-                    ? "bg-violet-600 rounded-tr-none shadow-violet-600/10" 
-                    : "bg-[#21262d] rounded-tl-none border border-white/5"
-                  }`}>
+                  <div className={`max-w-[85%] md:max-w-[70%] p-3 px-4 rounded-2xl shadow-md ${m.sender === userData.username ? "bg-violet-600 rounded-tr-none shadow-violet-600/10" : "bg-[#21262d] rounded-tl-none border border-white/5"}`}>
                     <p className="text-sm">{m.text}</p>
                   </div>
                 </div>
@@ -2194,15 +2184,8 @@ function Home() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Box */}
             <div className="p-4 bg-[#161b22]/50 backdrop-blur-md border-t border-white/10 flex gap-2 flex-shrink-0">
-                <input 
-                  className="flex-1 bg-white/5 border border-white/10 p-3 rounded-xl outline-none focus:border-violet-500 transition-all text-sm" 
-                  placeholder="Type a message..." 
-                  value={message} 
-                  onChange={(e) => setMessage(e.target.value)} 
-                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                />
+                <input className="flex-1 bg-white/5 border border-white/10 p-3 rounded-xl outline-none focus:border-violet-500 transition-all text-sm" placeholder="Type a message..." value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} />
                 <button onClick={handleSend} className="bg-violet-600 px-6 rounded-xl font-bold hover:bg-violet-500 transition-all shadow-lg shadow-violet-600/20">Send</button>
             </div>
           </>
@@ -2214,27 +2197,16 @@ function Home() {
         )}
       </div>
 
-      {/* MODAL */}
       {showAddChatModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
-          <div className="bg-[#1c2128] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl scale-in-center">
-            <div className="p-6 border-b border-white/5">
-              <h2 className="text-xl font-bold">Search Users</h2>
-            </div>
+          <div className="bg-[#1c2128] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl">
+            <div className="p-6 border-b border-white/5"><h2 className="text-xl font-bold">Search Users</h2></div>
             <div className="p-6">
-              <input 
-                autoFocus
-                className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none focus:border-violet-500 transition-all" 
-                placeholder="Search by username..." 
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-              />
+              <input autoFocus className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none focus:border-violet-500 transition-all" placeholder="Search by username..." value={searchQuery} onChange={(e) => handleSearch(e.target.value)} />
               <div className="mt-4 max-h-60 overflow-y-auto space-y-2">
                 {searchResults.map((u) => (
                   <div key={u._id} onClick={() => handleAddChat(u._id)} className="p-4 bg-white/5 hover:bg-violet-600 rounded-2xl cursor-pointer flex items-center gap-3 transition-all">
-                    <div className="w-10 h-10 rounded-full bg-violet-500 flex items-center justify-center font-bold">
-                        {u.username?.[0].toUpperCase()}
-                    </div>
+                    <div className="w-10 h-10 rounded-full bg-violet-500 flex items-center justify-center font-bold">{u.username?.[0].toUpperCase()}</div>
                     <span className="font-medium">{u.username}</span>
                   </div>
                 ))}
@@ -2247,7 +2219,8 @@ function Home() {
         </div>
       )}
 
-      <CallManager socket={socketRef.current} roomId={selectedChat?._id} currentUser={userData} />
+      {/* FIXED: Passing RoomId correctly */}
+      <CallManager socket={socketRef.current} roomId={selectedChat?._id || userData?._id} currentUser={userData} />
     </div>
   );
 }
