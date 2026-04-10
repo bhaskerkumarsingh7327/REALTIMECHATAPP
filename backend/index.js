@@ -224,26 +224,27 @@ connectDB();
 
 const app = express();
 
-// 🔥 FIXED: Added your Live Frontend Link here
+// 🔥 FIXED: CORS Origins (Hamesha yaad rakhein: No trailing slash at the end)
 const allowedOrigins = [
   "http://localhost:5173", 
   "http://127.0.0.1:5173", 
   "http://localhost:5174", 
-  "http://127.0.0.1:5174",
-  "https://realtimechatapp-frontend-7uv3.onrender.com" // Your Live Frontend
+  "https://realtimechatapp-frontend-7uv3.onrender.com" 
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    // Agar origin list mein hai, ya agar origin nahi hai (jaise mobile/Postman/Server-to-server)
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.log("Blocked by CORS: ", origin); // Taaki hum logs mein dekh sakein kaunsa link block hua
       callback(new Error("Not allowed by CORS"));
     }
   },
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
 }));
 
 app.use(express.json());
@@ -261,13 +262,14 @@ app.use("/api/media", mediaRouter);
 
 const server = http.createServer(app);
 
-// 🔥 FIXED: Socket.io CORS also updated
+// 🔥 FIXED: Socket.io CORS Configuration
 const io = new Server(server, {
   cors: { 
     origin: allowedOrigins, 
     methods: ["GET", "POST"],
     credentials: true 
   },
+  transports: ['websocket', 'polling'] // Better stability on Render
 });
 
 const roomUsers = {};
