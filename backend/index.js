@@ -314,7 +314,11 @@ dotenv.config();
 connectDB();
 
 const app = express();
-const allowedOrigins = ["http://localhost:5173", "https://realtimechatapp-bchat.netlify.app"];
+const allowedOrigins = [
+  "http://localhost:5173", 
+  "https://realtimechatapp-bchat.netlify.app",
+  "https://realtimechatapp-frontend-7uv3.onrender.com"
+];
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
@@ -348,20 +352,40 @@ io.on("connection", (socket) => {
   // ---- CALLING LOGIC: MUST USE socket.to(roomId) ----
   
   socket.on("call-user", ({ roomId, signal, callType, from }) => {
-    console.log("Call from:", from, "to room:", roomId);
-    // Yeh signal dusre user ki screen par popup layega
-    socket.to(roomId).emit("incoming-call", { from, signal, callType, roomId });
+    if (roomId) {
+      console.log("Call from:", from, "to room:", roomId);
+      // Yeh signal dusre user ki screen par popup layega
+      socket.to(roomId).emit("incoming-call", { from, signal, callType, roomId });
+    }
   });
 
   socket.on("answer-call", ({ roomId, signal }) => {
-    console.log("Call answered in room:", roomId);
-    // Yeh signal wapas caller ko jayega connection jodne ke liye
-    socket.to(roomId).emit("call-accepted", signal);
+    if (roomId) {
+      console.log("Call answered in room:", roomId);
+      // Yeh signal wapas caller ko jayega connection jodne ke liye
+      socket.to(roomId).emit("call-accepted", signal);
+    }
+  });
+  
+  // Audio se Video pe switch (Renegotiation) ke liye
+  socket.on("webrtc-signal", ({ roomId, signal }) => {
+    if (roomId) {
+      socket.to(roomId).emit("webrtc-signal", signal);
+    }
+  });
+
+  // Yeh stream ko lagatar judne me madad karega bina toote
+  socket.on("webrtc-ice", ({ roomId, candidate }) => {
+    if (roomId) {
+      socket.to(roomId).emit("webrtc-ice", candidate);
+    }
   });
 
   socket.on("end-call", ({ roomId }) => {
-    // Sabko notification do ki call band karo
-    io.in(roomId).emit("end-call");
+    if (roomId) {
+      // Sabko notification do ki call band karo
+      io.in(roomId).emit("end-call");
+    }
   });
 
   socket.on("disconnect", () => {
