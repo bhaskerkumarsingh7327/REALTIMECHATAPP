@@ -2053,11 +2053,15 @@ function Home() {
   }, [selectedChat?.messages]);
 
   useEffect(() => {
-    if (!userData) return;
+    if (!userData?._id) return;
 
-    socketRef.current = io(SOCKET_URL, { transports: ["websocket"] });
+    socketRef.current = io(SOCKET_URL, { 
+      transports: ["websocket"],
+      reconnection: true 
+    });
     
-    // FIX: Personal room join karna notifications ke liye
+    // Sabse Important: Apni Personal ID join karna
+    // Isse aap kahin bhi ho, call notification mil jayegi
     socketRef.current.emit("join-room", userData._id);
 
     fetchChats();
@@ -2065,19 +2069,27 @@ function Home() {
     socketRef.current.on("receive-message", (data) => {
       setSelectedChat((prev) => {
         if (prev && prev._id === data.chatId) {
-          const exists = prev.messages?.some(m => m._id === data.message._id);
-          if (exists) return prev;
+          const isDuplicate = prev.messages?.some(m => m._id === data.message._id);
+          if (isDuplicate) return prev;
           return { ...prev, messages: [...(prev.messages || []), data.message] };
         }
         return prev;
       });
-      fetchChats();
+
+      setChats((prevChats) => 
+        prevChats.map((c) => 
+          c._id === data.chatId 
+            ? { ...c, messages: [...(c.messages || []), data.message] } 
+            : c
+        )
+      );
     });
 
-    return () => { if (socketRef.current) socketRef.current.disconnect(); };
-  }, [userData]);
+    return () => {
+      if (socketRef.current) socketRef.current.disconnect();
+    };
+  }, [userData?._id]);
 
-  // Selected chat room join karna messaging ke liye
   useEffect(() => {
     if (selectedChat?._id && socketRef.current) {
       socketRef.current.emit("join-room", selectedChat._id);
@@ -2085,10 +2097,13 @@ function Home() {
   }, [selectedChat?._id]);
 
   const fetchChats = async () => {
-    if (!userData?._id) return;
     try {
       const res = await axios.get(`${serverUrl}/api/chat?userId=${userData._id}`);
-      setChats(Array.isArray(res.data) ? res.data : []);
+      const fetchedChats = Array.isArray(res.data) ? res.data : [];
+      setChats(fetchedChats);
+      if (socketRef.current) {
+        fetchedChats.forEach(chat => socketRef.current.emit("join-room", chat._id));
+      }
     } catch (err) { console.error(err); }
   };
 
@@ -2098,19 +2113,17 @@ function Home() {
     try {
       const res = await axios.post(`${serverUrl}/api/chat/message`, msgData);
       socketRef.current.emit("send-message", { roomId: selectedChat._id, message: res.data });
+      setSelectedChat(prev => ({ ...prev, messages: [...(prev.messages || []), res.data] }));
       setMessage("");
-      fetchChats();
     } catch (err) { console.error(err); }
   };
 
   const handleSearch = async (val) => {
     setSearchQuery(val);
-    if (val.trim().length > 0) {
-      try {
-        const res = await axios.get(`${serverUrl}/api/chat/search?query=${val}&myId=${userData._id}`);
-        setSearchResults(res.data || []);
-      } catch (err) { console.error(err); }
-    } else { setSearchResults([]); }
+    if (val.trim()) {
+      const res = await axios.get(`${serverUrl}/api/chat/search?query=${val}&myId=${userData._id}`);
+      setSearchResults(res.data || []);
+    }
   };
 
   const handleAddChat = async (recipientId) => {
@@ -2119,64 +2132,59 @@ function Home() {
       setChats([res.data, ...chats]);
       setSelectedChat(res.data);
       setShowAddChatModal(false);
+      if (socketRef.current) socketRef.current.emit("join-room", res.data._id);
     } catch (err) { console.error(err); }
   };
 
+  // Receiver ID nikalna calling ke liye
+  const recipient = selectedChat?.members?.find((m) => m._id !== userData?._id);
+
   return (
     <div className="fixed inset-0 flex h-[100dvh] w-full bg-[#0d1117] text-white overflow-hidden font-sans">
-      <div className={`w-full md:w-96 border-r border-white/10 flex flex-col bg-[#161b22]/50 backdrop-blur-xl ${selectedChat ? "hidden md:flex" : "flex"} h-full`}>
-        <div className="p-6 flex justify-between items-center border-b border-white/10 flex-shrink-0 bg-[#161b22]/80">
-          <div className="flex flex-col">
-            <h1 className="text-2xl font-black bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">B Chat</h1>
-            <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Realtime</span>
-          </div>
+      {/* Sidebar */}
+      <div className={`w-full md:w-96 border-r border-white/10 flex flex-col bg-[#161b22]/50 ${selectedChat ? "hidden md:flex" : "flex"} h-full`}>
+        <div className="p-6 flex justify-between items-center border-b border-white/10 flex-shrink-0">
+          <h1 className="text-2xl font-black text-violet-400">B Chat</h1>
           <div className="flex gap-2">
-             <Link to="/profile" className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all">👤</Link>
-             <button onClick={() => setShowAddChatModal(true)} className="w-10 h-10 rounded-xl bg-violet-600 hover:bg-violet-500 shadow-lg shadow-violet-600/20 font-bold">+</button>
-             <button onClick={() => { dispatch(clearUserData()); navigate("/login"); }} className="text-xs bg-red-500/10 text-red-500 px-3 py-1 rounded-lg border border-red-500/20 hover:bg-red-500 hover:text-white transition-all">Logout</button>
+             <Link to="/profile" className="p-2 bg-white/5 rounded-xl">👤</Link>
+             <button onClick={() => setShowAddChatModal(true)} className="p-2 bg-violet-600 rounded-xl">+</button>
+             <button onClick={() => { dispatch(clearUserData()); navigate("/login"); }} className="text-xs text-red-500">Logout</button>
           </div>
         </div>
-
         <div className="flex-1 overflow-y-auto py-2">
           {chats.map((chat) => {
-            const recipient = chat.members?.find((m) => m._id !== userData?._id);
+            const chatPartner = chat.members?.find((m) => m._id !== userData?._id);
             return (
-              <div key={chat._id} onClick={() => setSelectedChat(chat)} className={`mx-3 my-1 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-4 ${selectedChat?._id === chat._id ? "bg-violet-600 shadow-lg scale-[1.02]" : "hover:bg-white/5"}`}>
-                <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-violet-500 to-fuchsia-500 flex items-center justify-center font-bold text-lg flex-shrink-0 border border-white/10">
-                  {recipient?.username?.[0].toUpperCase() || "?"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{recipient?.username || "User"}</p>
-                  <p className="text-xs opacity-60 truncate">
-                    {chat.messages?.length > 0 ? chat.messages[chat.messages.length - 1].text : "Start chatting..."}
-                  </p>
-                </div>
+              <div key={chat._id} onClick={() => setSelectedChat(chat)} className={`mx-3 my-1 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-4 ${selectedChat?._id === chat._id ? "bg-violet-600" : "hover:bg-white/5"}`}>
+                <div className="w-12 h-12 rounded-full bg-violet-500 flex items-center justify-center font-bold">{chatPartner?.username?.[0].toUpperCase()}</div>
+                <div className="flex-1 min-w-0"><p className="font-semibold truncate">{chatPartner?.username || "User"}</p></div>
               </div>
             );
           })}
         </div>
       </div>
 
+      {/* Main Chat Area */}
       <div className={`flex-1 flex flex-col bg-[#0d1117] h-full ${!selectedChat ? "hidden md:flex" : "flex"}`}>
         {selectedChat ? (
           <>
-            <div className="p-4 bg-[#161b22]/80 backdrop-blur-md border-b border-white/10 flex justify-between items-center flex-shrink-0 z-10">
+            <div className="p-4 bg-[#161b22]/80 border-b border-white/10 flex justify-between items-center z-10">
               <div className="flex items-center gap-3">
-                 <button onClick={() => setSelectedChat(null)} className="md:hidden text-violet-400 text-xl pr-2">←</button>
-                 <div className="w-10 h-10 rounded-full bg-violet-600/20 flex items-center justify-center text-violet-400 font-bold border border-violet-500/30">
-                    {selectedChat.members?.find(m => m._id !== userData?._id)?.username?.[0].toUpperCase()}
-                 </div>
-                 <span className="font-bold text-lg truncate">
-                   {selectedChat.members?.find(m => m._id !== userData?._id)?.username}
-                 </span>
+                 <button onClick={() => setSelectedChat(null)} className="md:hidden">←</button>
+                 <span className="font-bold text-lg">{recipient?.username}</span>
               </div>
-              <CallButtons socket={socketRef.current} roomId={selectedChat._id} currentUser={userData} />
+              {/* FIXED: Pass the current chat _id as roomId so both users connect in the same room */}
+              <CallButtons 
+                socket={socketRef.current} 
+                roomId={selectedChat?._id} 
+                currentUser={userData} 
+              />
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 min-h-0">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {selectedChat.messages?.map((m, i) => (
                 <div key={i} className={`flex ${m.sender === userData.username ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[85%] md:max-w-[70%] p-3 px-4 rounded-2xl shadow-md ${m.sender === userData.username ? "bg-violet-600 rounded-tr-none shadow-violet-600/10" : "bg-[#21262d] rounded-tl-none border border-white/5"}`}>
+                  <div className={`max-w-[70%] p-3 px-4 rounded-2xl ${m.sender === userData.username ? "bg-violet-600" : "bg-[#21262d]"}`}>
                     <p className="text-sm">{m.text}</p>
                   </div>
                 </div>
@@ -2184,43 +2192,38 @@ function Home() {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="p-4 bg-[#161b22]/50 backdrop-blur-md border-t border-white/10 flex gap-2 flex-shrink-0">
-                <input className="flex-1 bg-white/5 border border-white/10 p-3 rounded-xl outline-none focus:border-violet-500 transition-all text-sm" placeholder="Type a message..." value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} />
-                <button onClick={handleSend} className="bg-violet-600 px-6 rounded-xl font-bold hover:bg-violet-500 transition-all shadow-lg shadow-violet-600/20">Send</button>
+            <div className="p-4 bg-[#161b22]/50 border-t border-white/10 flex gap-2">
+                <input className="flex-1 bg-white/5 border border-white/10 p-3 rounded-xl outline-none" placeholder="Type..." value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} />
+                <button onClick={handleSend} className="bg-violet-600 px-6 rounded-xl font-bold">Send</button>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-4 text-center">
-            <div className="text-5xl mb-4 opacity-20">💬</div>
-            <p className="font-medium">Select a friend to start chatting</p>
-          </div>
+          <div className="flex-1 flex items-center justify-center text-gray-500">Select a chat to start</div>
         )}
       </div>
 
+      {/* Call Manager is listening on the User's Personal ID room */}
+      <CallManager 
+        socket={socketRef.current} 
+        roomId={userData?._id} 
+        currentUser={userData} 
+      />
+
+      {/* Add Chat Modal */}
       {showAddChatModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
-          <div className="bg-[#1c2128] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl">
-            <div className="p-6 border-b border-white/5"><h2 className="text-xl font-bold">Search Users</h2></div>
-            <div className="p-6">
-              <input autoFocus className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none focus:border-violet-500 transition-all" placeholder="Search by username..." value={searchQuery} onChange={(e) => handleSearch(e.target.value)} />
-              <div className="mt-4 max-h-60 overflow-y-auto space-y-2">
-                {searchResults.map((u) => (
-                  <div key={u._id} onClick={() => handleAddChat(u._id)} className="p-4 bg-white/5 hover:bg-violet-600 rounded-2xl cursor-pointer flex items-center gap-3 transition-all">
-                    <div className="w-10 h-10 rounded-full bg-violet-500 flex items-center justify-center font-bold">{u.username?.[0].toUpperCase()}</div>
-                    <span className="font-medium">{u.username}</span>
-                  </div>
-                ))}
-              </div>
+          <div className="bg-[#1c2128] w-full max-w-md rounded-3xl border border-white/10 p-6">
+            <h2 className="text-xl font-bold mb-4">New Chat</h2>
+            <input className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none mb-4" placeholder="Search username..." value={searchQuery} onChange={(e) => handleSearch(e.target.value)} />
+            <div className="max-h-60 overflow-y-auto">
+              {searchResults.map(u => (
+                <div key={u._id} onClick={() => handleAddChat(u._id)} className="p-4 hover:bg-violet-600 rounded-2xl cursor-pointer mb-1">{u.username}</div>
+              ))}
             </div>
-            <div className="p-4 flex justify-end">
-              <button onClick={() => { setShowAddChatModal(false); setSearchResults([]); }} className="text-sm font-bold text-gray-400 hover:text-white px-4 py-2 transition-colors">Cancel</button>
-            </div>
+            <button onClick={() => setShowAddChatModal(false)} className="mt-4 text-gray-400">Close</button>
           </div>
         </div>
       )}
-
-      {/* FIXED: Passing RoomId correctly */}
-      <CallManager socket={socketRef.current} roomId={selectedChat?._id || userData?._id} currentUser={userData} />
     </div>
   );
 }
