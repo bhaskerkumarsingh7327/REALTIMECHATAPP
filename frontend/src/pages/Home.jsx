@@ -2030,7 +2030,6 @@ import { serverUrl } from "../main";
 import CallButtons from "../components/CallButtons";
 import CallManager from "../components/CallManager";
 
-// LIVE BACKEND SOCKET LINK ADDED
 const SOCKET_URL = "https://realtimechatapp-index.onrender.com";
 
 function Home() {
@@ -2059,8 +2058,10 @@ function Home() {
   useEffect(() => {
     if (!userData) return;
 
-    socketRef.current = io(SOCKET_URL);
+    // Fixed: Transports added for reliability
+    socketRef.current = io(SOCKET_URL, { transports: ["websocket"] });
     
+    // Join personal room for notifications/calls
     socketRef.current.emit("join-room", userData._id);
 
     fetchChats();
@@ -2068,6 +2069,9 @@ function Home() {
     socketRef.current.on("receive-message", (data) => {
       setSelectedChat((prev) => {
         if (prev && prev._id === data.chatId) {
+          // Check for duplicate messages
+          const messageExists = prev.messages?.some(m => m._id === data.message._id);
+          if (messageExists) return prev;
           return { ...prev, messages: [...(prev.messages || []), data.message] };
         }
         return prev;
@@ -2126,9 +2130,9 @@ function Home() {
       const res = await axios.post(`${serverUrl}/api/chat/message`, msgData);
       const savedMsg = res.data;
 
+      // Fixed: roomId matches what backend expects
       socketRef.current.emit("send-message", {
         roomId: selectedChat._id,
-        chatId: selectedChat._id,
         message: savedMsg,
       });
       
@@ -2148,7 +2152,6 @@ function Home() {
 
   return (
     <div className="flex h-screen bg-[#0d1117] text-white overflow-hidden font-sans">
-      {/* SIDEBAR: Mobile pe tab dikhega jab chat selected nahi hai */}
       <div className={`w-full md:w-96 border-r border-white/10 flex flex-col bg-[#161b22]/50 backdrop-blur-xl ${selectedChat ? "hidden md:flex" : "flex"}`}>
         <div className="p-6 flex justify-between items-center border-b border-white/10 bg-[#161b22]/80">
           <div className="flex flex-col">
@@ -2192,13 +2195,11 @@ function Home() {
         </div>
       </div>
 
-      {/* CHAT AREA: Mobile pe tab dikhega jab chat select hogi */}
       <div className={`flex-1 flex-col bg-[#0d1117] ${!selectedChat ? "hidden md:flex" : "flex"}`}>
         {selectedChat ? (
           <>
             <div className="p-4 bg-[#161b22]/80 backdrop-blur-md border-b border-white/10 flex justify-between items-center z-10">
               <div className="flex items-center gap-3">
-                 {/* Back button sirf mobile pe dikhega */}
                  <button 
                    onClick={() => setSelectedChat(null)} 
                    className="md:hidden text-2xl pr-2 text-violet-400 hover:text-violet-300 transition-colors"
@@ -2246,7 +2247,6 @@ function Home() {
         )}
       </div>
 
-      {/* Modal is already responsive with max-w-md */}
       {showAddChatModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-[#1c2128] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl">
@@ -2283,6 +2283,7 @@ function Home() {
         </div>
       )}
 
+      {/* CallManager handles the overlay UI for calls */}
       <CallManager socket={socketRef.current} roomId={selectedChat?._id} currentUser={userData} />
     </div>
   );

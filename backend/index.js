@@ -224,7 +224,6 @@ connectDB();
 
 const app = express();
 
-// 🔥 FIXED: CORS Origins (Hamesha yaad rakhein: No trailing slash at the end)
 const allowedOrigins = [
   "http://localhost:5173", 
   "http://127.0.0.1:5173", 
@@ -234,11 +233,9 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Agar origin list mein hai, ya agar origin nahi hai (jaise mobile/Postman/Server-to-server)
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.log("Blocked by CORS: ", origin); // Taaki hum logs mein dekh sakein kaunsa link block hua
       callback(new Error("Not allowed by CORS"));
     }
   },
@@ -249,78 +246,50 @@ app.use(cors({
 
 app.use(express.json());
 app.use(cookieParser());
-
-// Serve uploaded files
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 app.get("/", (req, res) => res.send("Backend is running 🚀"));
-
 app.use("/api/chat", chatRoutes);
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
 app.use("/api/media", mediaRouter);
 
 const server = http.createServer(app);
-
-// 🔥 FIXED: Socket.io CORS Configuration
 const io = new Server(server, {
-  cors: { 
-    origin: allowedOrigins, 
-    methods: ["GET", "POST"],
-    credentials: true 
-  },
-  transports: ['websocket', 'polling'] // Better stability on Render
+  cors: { origin: allowedOrigins, methods: ["GET", "POST"], credentials: true },
+  transports: ['websocket', 'polling']
 });
-
-const roomUsers = {};
 
 io.on("connection", (socket) => {
   console.log("New socket connected:", socket.id);
 
   socket.on("join-room", (roomId) => {
     socket.join(roomId);
-    if (!roomUsers[roomId]) roomUsers[roomId] = [];
-    if (!roomUsers[roomId].includes(socket.id)) {
-      roomUsers[roomId].push(socket.id);
-    }
     console.log(`Socket ${socket.id} joined room: ${roomId}`);
   });
 
   socket.on("send-message", ({ roomId, message }) => {
-    socket.to(roomId).emit("receive-message", { chatId: roomId, message });
+    io.in(roomId).emit("receive-message", { chatId: roomId, message });
   });
 
-  // ---- CALL SIGNALING ----
+  // ---- CALL SIGNALING FIXED ----
   socket.on("call-user", ({ roomId, signal, callType, from }) => {
     socket.to(roomId).emit("incoming-call", { from, signal, callType });
+  });
+
+  socket.on("answer-call", ({ roomId, signal }) => {
+    socket.to(roomId).emit("call-accepted", signal);
   });
 
   socket.on("signal", ({ roomId, signal }) => {
     socket.to(roomId).emit("signal", { signal, from: socket.id });
   });
 
-  socket.on("end-call", ({ roomId } = {}) => {
-    if (roomId) socket.to(roomId).emit("end-call");
-  });
-
-  socket.on("call-started", ({ roomId, callType, sender }) => {
-    socket.to(roomId).emit("receive-message", {
-      chatId: roomId,
-      message: { sender: "system", text: `📞 ${sender} started a ${callType} call` },
-    });
-  });
-
-  socket.on("call-ended", ({ roomId, sender }) => {
-    socket.to(roomId).emit("receive-message", {
-      chatId: roomId,
-      message: { sender: "system", text: `🔚 ${sender}'s call ended` },
-    });
+  socket.on("end-call", ({ roomId }) => {
+    if (roomId) io.in(roomId).emit("end-call");
   });
 
   socket.on("disconnect", () => {
-    for (const roomId in roomUsers) {
-      roomUsers[roomId] = roomUsers[roomId].filter((id) => id !== socket.id);
-    }
     console.log("Socket disconnected:", socket.id);
   });
 });
