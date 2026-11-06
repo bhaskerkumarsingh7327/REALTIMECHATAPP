@@ -120,10 +120,15 @@ export const sendMessage = async (req, res) => {
 export const markChatAsSeen = async (req, res) => {
   try {
     const { chatId } = req.params;
-    const { userId } = req.body;
+    let { userId, readerUsername } = req.body;
 
     if (!chatId || !userId) {
       return res.status(400).json({ error: "chatId and userId are required" });
+    }
+
+    if (!readerUsername) {
+      const u = await User.findById(userId).select("username");
+      if (u) readerUsername = u.username;
     }
 
     const chat = await Chat.findById(chatId);
@@ -133,7 +138,12 @@ export const markChatAsSeen = async (req, res) => {
     let modified = false;
 
     chat.messages.forEach((msg) => {
-      if (msg.senderId && String(msg.senderId) !== String(userId) && !msg.seen) {
+      // Must NOT be from the reader (only mark partner's messages as seen)
+      const isFromReader =
+        (msg.senderId && String(msg.senderId) === String(userId)) ||
+        (readerUsername && msg.sender === readerUsername);
+
+      if (!isFromReader && !msg.seen) {
         msg.seen = true;
         msg.seenAt = now;
         modified = true;

@@ -4,6 +4,8 @@ import {
   createOrGetChat,
   sendMessage,
   markChatAsSeen,
+  pinMessage,
+  unpinMessage,
   clearChatHistory,
   addReaction,
   deleteMessage,
@@ -18,6 +20,8 @@ router.get("/", getMyChats);
 router.post("/", createOrGetChat);
 router.post("/message", sendMessage);
 router.post("/:chatId/seen", markChatAsSeen);
+router.post("/:chatId/pin", pinMessage);
+router.post("/:chatId/unpin", unpinMessage);
 router.post("/:chatId/clear", clearChatHistory);
 router.post("/reaction", addReaction);
 router.delete("/:chatId/message/:messageId", deleteMessage);

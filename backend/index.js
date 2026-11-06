@@ -186,15 +186,26 @@ io.on("connection", (socket) => {
   });
 
   // 7.1 Mark Messages as Seen / Read Receipts
-  socket.on("mark-as-seen", async ({ roomId, userId, senderId }) => {
+  socket.on("mark-as-seen", async ({ roomId, userId, readerId, readerUsername, senderId }) => {
     try {
+      const activeReaderId = readerId || userId;
       const now = new Date();
       if (roomId && !roomId.startsWith("pulse_ai")) {
         const chat = await Chat.findById(roomId);
         if (chat) {
+          let resolvedUsername = readerUsername;
+          if (!resolvedUsername && activeReaderId) {
+            const u = await User.findById(activeReaderId).select("username");
+            if (u) resolvedUsername = u.username;
+          }
+
           let modified = false;
           chat.messages.forEach((msg) => {
-            if (msg.senderId && String(msg.senderId) !== String(userId) && !msg.seen) {
+            const isFromReader =
+              (msg.senderId && String(msg.senderId) === String(activeReaderId)) ||
+              (resolvedUsername && msg.sender === resolvedUsername);
+
+            if (!isFromReader && !msg.seen) {
               msg.seen = true;
               msg.seenAt = now;
               modified = true;
@@ -203,17 +214,17 @@ io.on("connection", (socket) => {
           if (modified) await chat.save();
         }
       }
-      io.in(String(roomId)).emit("messages-seen-updated", {
+
+      const payload = {
         roomId: String(roomId),
-        userId: String(userId),
+        readerId: String(activeReaderId),
+        readerUsername: readerUsername || "",
         seenAt: now,
-      });
+      };
+
+      io.in(String(roomId)).emit("messages-seen-updated", payload);
       if (senderId) {
-        io.to(String(senderId)).emit("messages-seen-updated", {
-          roomId: String(roomId),
-          userId: String(userId),
-          seenAt: now,
-        });
+        io.to(String(senderId)).emit("messages-seen-updated", payload);
       }
     } catch (e) {
       console.error("Error in mark-as-seen socket handler:", e);
@@ -224,6 +235,19 @@ io.on("connection", (socket) => {
   socket.on("clear-chat", ({ roomId }) => {
     if (roomId) {
       io.in(String(roomId)).emit("chat-cleared", { roomId });
+    }
+  });
+
+  // 7.3 Pin & Unpin Message
+  socket.on("pin-message", ({ roomId, message }) => {
+    if (roomId) {
+      io.in(String(roomId)).emit("message-pinned", { roomId, message });
+    }
+  });
+
+  socket.on("unpin-message", ({ roomId }) => {
+    if (roomId) {
+      io.in(String(roomId)).emit("message-unpinned", { roomId });
     }
   });
 

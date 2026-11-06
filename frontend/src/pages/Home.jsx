@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useNavigate, Link } from "react-router-dom";
 import { clearUserData, setUserData } from "../redux/userSlice";
@@ -38,10 +38,11 @@ import {
 import { sounds } from "../utils/soundEffects";
 import { PULSE_AI_USER, generateAIResponse } from "../utils/aiBot";
 
-// Helper for relative time formatting (e.g., "just now", "2m ago", "1h ago", "yesterday")
+// Helper for relative time formatting (e.g., "just now", "1 min ago", "5 mins ago", "1 hour ago", "2 hours ago", "yesterday")
 function formatRelativeTime(dateInput) {
   if (!dateInput) return "";
   const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return "";
   const now = new Date();
   const diffMs = now - date;
   if (diffMs < 0) return "just now";
@@ -50,13 +51,13 @@ function formatRelativeTime(dateInput) {
   const diffHours = Math.floor(diffMins / 60);
   const diffDays = Math.floor(diffHours / 24);
 
-  if (diffSecs < 60) return "just now";
-  if (diffMins === 1) return "1m ago";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours === 1) return "1h ago";
-  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffSecs < 45) return "just now";
+  if (diffSecs < 90) return "1 min ago";
+  if (diffMins < 60) return `${diffMins} mins ago`;
+  if (diffHours === 1) return "1 hour ago";
+  if (diffHours < 24) return `${diffHours} hours ago`;
   if (diffDays === 1) return "yesterday";
-  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 7) return `${diffDays} days ago`;
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
@@ -133,6 +134,15 @@ export default function Home() {
         .catch(() => {});
     }
   }, [userData?._id, dispatch]);
+
+  // Live ticker to update relative elapsed time (e.g., "just now" -> "1 min ago" -> "5 mins ago" -> "1 hour ago")
+  const [, setTimeTick] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeTick(Date.now());
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Sound toggle helper
   const toggleSoundMute = () => {
@@ -248,22 +258,42 @@ export default function Home() {
     });
 
     // Realtime Read Receipts / Seen status
-    socket.on("messages-seen-updated", ({ roomId, userId, seenAt }) => {
-      const updateSeen = (msgs) =>
-        msgs?.map((m) => {
-          if (m.sender === userData.username || (m.senderId && String(m.senderId) !== String(userId))) {
-            return { ...m, seen: true, seenAt: seenAt || m.seenAt || new Date() };
-          }
-          return m;
-        });
+    socket.on("messages-seen-updated", ({ roomId, readerId, readerUsername, userId, seenAt }) => {
+      const effectiveReaderId = readerId || userId;
+      const currentUid = String(userData?._id || userData?.id || "");
+      const currentUname = userData?.username;
 
-      setSelectedChat((prev) =>
-        prev && String(prev._id) === String(roomId) ? { ...prev, messages: updateSeen(prev.messages) } : prev
-      );
+      // Crucial: Only update my sent messages if the reader is SOMEONE ELSE (the recipient / partner)
+      const isReadByOther =
+        (effectiveReaderId && String(effectiveReaderId) !== currentUid) ||
+        (readerUsername && readerUsername !== currentUname);
 
-      setChats((prev) =>
-        prev.map((c) => (String(c._id) === String(roomId) ? { ...c, messages: updateSeen(c.messages) } : c))
-      );
+      if (isReadByOther) {
+        const markMySentAsSeen = (msgs) =>
+          msgs?.map((m) => {
+            const isMySent =
+              m.sender === currentUname ||
+              (m.senderId && String(m.senderId) === currentUid);
+            if (isMySent && !m.system) {
+              return { ...m, seen: true, seenAt: m.seenAt || seenAt || new Date() };
+            }
+            return m;
+          });
+
+        setSelectedChat((prev) =>
+          prev && String(prev._id) === String(roomId)
+            ? { ...prev, messages: markMySentAsSeen(prev.messages) }
+            : prev
+        );
+
+        setChats((prev) =>
+          prev.map((c) =>
+            String(c._id) === String(roomId)
+              ? { ...c, messages: markMySentAsSeen(c.messages) }
+              : c
+          )
+        );
+      }
     });
 
     // Realtime Chat Cleared
@@ -409,12 +439,15 @@ export default function Home() {
       socketRef.current?.emit("mark-as-seen", {
         roomId: selectedChat._id,
         userId: userData._id,
+        readerId: userData._id,
+        readerUsername: userData.username,
         senderId: partner?._id,
       });
 
       axios
         .post(`${serverUrl}/api/chat/${selectedChat._id}/seen`, {
           userId: userData._id,
+          readerUsername: userData.username,
         })
         .catch(() => {});
 
@@ -424,7 +457,7 @@ export default function Home() {
         return {
           ...prev,
           messages: prev.messages?.map((m) =>
-            m.sender !== userData.username ? { ...m, seen: true, seenAt: now } : m
+            m.sender !== userData.username ? { ...m, seen: true, seenAt: m.seenAt || now } : m
           ),
         };
       });
@@ -435,13 +468,13 @@ export default function Home() {
           return {
             ...c,
             messages: c.messages?.map((m) =>
-              m.sender !== userData.username ? { ...m, seen: true, seenAt: now } : m
+              m.sender !== userData.username ? { ...m, seen: true, seenAt: m.seenAt || now } : m
             ),
           };
         })
       );
     }
-  }, [selectedChat?._id, selectedChat?.messages?.length, userData?._id]);
+  }, [selectedChat?._id, selectedChat?.messages?.length, userData?._id, userData?.username]);
 
   // Helper to extract the other user in a 1-to-1 chat
   const getChatPartner = (chat) => {
@@ -988,6 +1021,22 @@ export default function Home() {
     return `${serverUrl}${url.startsWith("/") ? "" : "/"}${url}`;
   };
 
+  // Calculate index of the very last sent message so "Seen X mins ago" only appears once at the bottom
+  const lastSentMsgIndex = useMemo(() => {
+    if (!selectedChat?.messages || !Array.isArray(selectedChat.messages)) return -1;
+    for (let i = selectedChat.messages.length - 1; i >= 0; i--) {
+      const m = selectedChat.messages[i];
+      const isSystem = m.system || m.mediaType === "system" || m.sender === "System";
+      const isMyMsg =
+        m.sender === userData?.username ||
+        (m.senderId && String(m.senderId) === String(userData?._id));
+      if (!isSystem && isMyMsg) {
+        return i;
+      }
+    }
+    return -1;
+  }, [selectedChat?.messages, userData?.username, userData?._id]);
+
   return (
     <div className="fixed inset-0 flex h-[100dvh] w-full bg-[#070a12] text-white overflow-hidden font-sans select-none">
       {/* Dynamic Ambient Background Glows */}
@@ -1487,9 +1536,11 @@ export default function Home() {
                           <div className="flex items-center gap-1">
                             {msg.seen ? (
                               <>
-                                <span className="text-[9px] text-cyan-300 font-semibold tracking-tight">
-                                  {msg.seenAt ? `Seen ${formatRelativeTime(msg.seenAt)}` : "Seen"}
-                                </span>
+                                {idx === lastSentMsgIndex && (
+                                  <span className="text-[9px] text-cyan-300 font-semibold tracking-tight">
+                                    {msg.seenAt ? `Seen ${formatRelativeTime(msg.seenAt)}` : "Seen"}
+                                  </span>
+                                )}
                                 <span title={msg.seenAt ? `Seen ${formatRelativeTime(msg.seenAt)}` : "Seen"}>
                                   <IconCheckDouble className="w-3.5 h-3.5 text-cyan-400 stroke-[2.5]" />
                                 </span>

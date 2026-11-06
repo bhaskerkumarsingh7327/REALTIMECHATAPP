@@ -359,3 +359,4 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
     </div>
   );
 }
+
