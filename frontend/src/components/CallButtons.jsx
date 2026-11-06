@@ -1,51 +1,23 @@
-/**
- * CallButtons.jsx
- * 
- * Drop these buttons in your chat header to start calls.
- * 
- * Usage:
- *   <CallButtons
- *     socket={socket}
- *     roomId={currentChatId}
- *     currentUser={userData}
- *   />
- */
+import React from "react";
+import { IconPhone, IconVideo } from "./Icons";
 
-export default function CallButtons({ socket, roomId, currentUser }) {
-  const startCall = (type) => {
-    if (window.__startCall) {
-      window.__startCall(type, roomId);
-    } else {
-      console.warn("CallManager not mounted. Add <CallManager> to your component tree.");
-    }
-  };
-
+export default function CallButtons({ onStartAudioCall, onStartVideoCall }) {
   return (
-    <div style={{ display: "flex", gap: "8px" }}>
+    <div className="flex items-center gap-2">
       <button
-        onClick={() => startCall("audio")}
-        title="Audio Call"
-        style={btnStyle}
+        onClick={onStartAudioCall}
+        title="Voice Call"
+        className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition shadow-sm"
       >
-        📞
+        <IconPhone className="w-5 h-5" />
       </button>
       <button
-        onClick={() => startCall("video")}
+        onClick={onStartVideoCall}
         title="Video Call"
-        style={btnStyle}
+        className="p-2.5 rounded-xl bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition shadow-sm"
       >
-        📹
+        <IconVideo className="w-5 h-5" />
       </button>
     </div>
   );
 }
-
-const btnStyle = {
-  background: "transparent",
-  border: "1px solid #374151",
-  borderRadius: "8px",
-  padding: "6px 10px",
-  fontSize: "18px",
-  cursor: "pointer",
-  transition: "background 0.2s",
-};

@@ -1,111 +1,52 @@
-// import Chat from "../models/chat.model.js";
-
-
-// // GET chats for a user
-// export const getMessages = async (req, res) => {
-//   try {
-//     const { userId } = req.query;
-//     if (!userId) return res.status(400).json({ error: "userId required" });
-//     const chats = await Chat.find({ userId }).sort({ createdAt: 1 });
-//     res.json({ chats });
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// };
-
-
-// // ADD new chat
-// export const addChat = async (req, res) => {
-//   try {
-//     const { name, avatar, userId } = req.body;
-//     if (!name || !userId) return res.status(400).json({ error: "Name and userId required" });
-
-//     const newChat = new Chat({
-//       name,
-//       avatar: avatar || "",
-//       userId,
-//       messages: [],
-//     });
-
-//     await newChat.save();
-//     res.json({ chat: newChat });
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// };
-
-// // SEND new message
-// export const sendMessage = async (req, res) => {
-//   try {
-//     const { chatId, sender, text } = req.body;
-//     if (!chatId || !sender || !text) return res.status(400).json({ error: "chatId, sender and text required" });
-
-//     const chat = await Chat.findById(chatId);
-//     if (!chat) return res.status(404).json({ error: "Chat not found" });
-
-//     const newMessage = { sender, text };
-//     chat.messages.push(newMessage);
-//     await chat.save();
-
-//     res.json(newMessage);
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// };
-
-// // DELETE chat
-// export const deleteChat = async (req, res) => {
-//   try {
-//     const { chatId } = req.params;
-//     await Chat.findByIdAndDelete(chatId);
-//     res.json({ success: true });
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// };
 import Chat from "../models/chat.model.js";
 import User from "../models/user.model.js";
 
-// 1. GET MY CHATS
+// 1. GET ALL CHATS FOR A USER
 export const getMyChats = async (req, res) => {
   try {
     const { userId } = req.query;
-    if (!userId) return res.status(400).json({ error: "userId required" });
-    
-    // Sirf wahi chats nikalna jisme main member hoon
+    if (!userId) {
+      return res.status(400).json({ error: "userId is required" });
+    }
+
     const chats = await Chat.find({ members: userId })
-      .populate("members", "username avatar") 
-      .sort({ updatedAt: -1 }); // Taki latest chat upar aaye
-      
-    res.status(200).json(chats || []); // Hamesha array bhejien
+      .populate("members", "username name avatar about isOnline lastSeen")
+      .sort({ updatedAt: -1 });
+
+    res.status(200).json(chats || []);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// 2. CREATE or GET CHAT (Yahi function user add karega)
+// 2. CREATE OR GET CHAT
 export const createOrGetChat = async (req, res) => {
   try {
     const { myId, recipientId } = req.body;
 
     if (!myId || !recipientId) {
-      return res.status(400).json({ error: "Both user IDs are required" });
+      return res.status(400).json({ error: "Both myId and recipientId are required" });
     }
 
-    // Check ki kya pehle se in dono ke beech chat hai?
+    if (myId === recipientId) {
+      return res.status(400).json({ error: "Cannot create chat with yourself" });
+    }
+
+    // Check if chat already exists
     let chat = await Chat.findOne({
       members: { $all: [myId, recipientId] },
-    }).populate("members", "username avatar");
+    }).populate("members", "username name avatar about isOnline lastSeen");
 
     if (!chat) {
-      // Agar nahi hai, toh Nayi Chat create karo (Isse user list mein add ho jayega)
       chat = new Chat({
         members: [myId, recipientId],
         messages: [],
       });
       await chat.save();
-      // Populate dobara kyunki naye chat mein data nahi hota
-      chat = await Chat.findById(chat._id).populate("members", "username avatar");
+      chat = await Chat.findById(chat._id).populate(
+        "members",
+        "username name avatar about isOnline lastSeen"
+      );
     }
 
     res.status(200).json(chat);
@@ -117,57 +58,104 @@ export const createOrGetChat = async (req, res) => {
 // 3. SEND MESSAGE
 export const sendMessage = async (req, res) => {
   try {
-    const { chatId, sender, text, mediaUrl, mediaType } = req.body;
-    if (!chatId || !sender) return res.status(400).json({ error: "chatId/sender required" });
+    const { chatId, sender, senderId, text, mediaUrl, mediaType, fileName, fileSize, system } = req.body;
 
-    // Message object create karein
-    const newMessage = { 
-      sender, 
-      text: text || "", 
-      mediaUrl: mediaUrl || "", 
-      mediaType: mediaType || "",
-      createdAt: new Date()
+    if (!chatId || !sender) {
+      return res.status(400).json({ error: "chatId and sender are required" });
+    }
+
+    const newMessage = {
+      sender,
+      senderId: senderId || null,
+      text: text || "",
+      mediaUrl: mediaUrl || "",
+      mediaType: mediaType || (mediaUrl ? "image" : "text"),
+      fileName: fileName || "",
+      fileSize: fileSize || "",
+      system: !!system,
+      createdAt: new Date(),
+      reactions: [],
     };
-    
-    // Chat ko update karein aur updatedAt timestamp ko badlein
+
+    const previewText = system ? text : (text || (mediaType === "audio" ? "🎵 Voice message" : (mediaType === "image" ? "📷 Photo" : "📎 File")));
+
     const updatedChat = await Chat.findByIdAndUpdate(
       chatId,
-      { 
+      {
         $push: { messages: newMessage },
-        $set: { updatedAt: new Date() } // Taki chat list mein ye upar aa jaye
+        $set: {
+          lastMessage: previewText,
+          lastMessageAt: new Date(),
+          updatedAt: new Date(),
+        },
       },
       { new: true }
     );
 
-    if (!updatedChat) return res.status(404).json({ error: "Chat not found" });
+    if (!updatedChat) {
+      return res.status(404).json({ error: "Chat not found" });
+    }
 
-    res.json(newMessage);
+    // Return the newly created message item with its _id
+    const savedMsg = updatedChat.messages[updatedChat.messages.length - 1];
+    res.status(201).json(savedMsg);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// 4. SEARCH USERS
-export const searchUsers = async (req, res) => {
+// 4. ADD / TOGGLE REACTION
+export const addReaction = async (req, res) => {
   try {
-    const { query, myId } = req.query;
-    if (!query) return res.status(200).json([]); // Query nahi toh khali array
+    const { chatId, messageId, emoji, username, userId } = req.body;
+    if (!chatId || !messageId || !emoji || !username) {
+      return res.status(400).json({ error: "Missing reaction details" });
+    }
 
-    const users = await User.find({
-      _id: { $ne: myId }, // Apne aap ko search mein na dikhayein
-      $or: [
-        { username: { $regex: query, $options: "i" } },
-        { email: { $regex: query, $options: "i" } }
-      ],
-    }).select("username avatar _id").limit(10); // Sirf zaroori fields bhejein
+    const chat = await Chat.findById(chatId);
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
 
-    res.json(users);
+    const message = chat.messages.id(messageId);
+    if (!message) return res.status(404).json({ error: "Message not found" });
+
+    // Check if user already reacted with this emoji
+    const existingIndex = message.reactions.findIndex(
+      (r) => r.username === username && r.emoji === emoji
+    );
+
+    if (existingIndex > -1) {
+      // Remove reaction (toggle)
+      message.reactions.splice(existingIndex, 1);
+    } else {
+      // Remove any prior reaction by same user or allow multiple
+      message.reactions = message.reactions.filter((r) => r.username !== username);
+      message.reactions.push({ emoji, username, userId });
+    }
+
+    await chat.save();
+    res.status(200).json({ success: true, reactions: message.reactions });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// 5. DELETE CHAT
+// 5. DELETE A MESSAGE
+export const deleteMessage = async (req, res) => {
+  try {
+    const { chatId, messageId } = req.params;
+    const chat = await Chat.findById(chatId);
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    chat.messages = chat.messages.filter((m) => m._id.toString() !== messageId);
+    await chat.save();
+
+    res.status(200).json({ success: true, messageId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// 6. DELETE CHAT
 export const deleteChat = async (req, res) => {
   try {
     const { chatId } = req.params;
@@ -177,7 +165,33 @@ export const deleteChat = async (req, res) => {
       return res.status(404).json({ error: "Chat not found" });
     }
 
-    res.status(200).json({ success: true, message: "Chat deleted successfully." });
+    res.status(200).json({ success: true, message: "Chat deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// 7. SEARCH USERS
+export const searchUsers = async (req, res) => {
+  try {
+    const { query, myId } = req.query;
+    if (!query || !query.trim()) {
+      return res.status(200).json([]);
+    }
+
+    const trimmed = query.trim();
+    const users = await User.find({
+      _id: { $ne: myId },
+      $or: [
+        { username: { $regex: trimmed, $options: "i" } },
+        { name: { $regex: trimmed, $options: "i" } },
+        { email: { $regex: trimmed, $options: "i" } },
+      ],
+    })
+      .select("username name avatar about isOnline _id")
+      .limit(15);
+
+    res.status(200).json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

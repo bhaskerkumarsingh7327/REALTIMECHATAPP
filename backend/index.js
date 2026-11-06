@@ -1,301 +1,3 @@
-// import express from "express";
-// import dotenv from "dotenv";
-// import connectDb from "./config/db.js";
-// import authRouter from "./routes/auth.routes.js";
-// import cookieParser from "cookie-parser";
-// import chatRoutes from "./routes/chat.routes.js";
-// dotenv.config();
-
-// const port=process.env.port || 8000;
-
-// const app = express();
-// app.use(express.json());
-// app.use(cookieParser());
-
-// app.use("/api/auth",authRouter)
-// app.use("/api/chat",chatRoutes)
-// app.get("/", (req,res)=>{
-//     res.send("server is running")
-// })
-
-
-
-// app.listen(port,()=>{
-//     connectDb();
-//     console.log("server is running on port");
-// })
-
-
-
-// import express from "express";
-// import http from "http";
-// import { Server } from "socket.io";
-// import cors from "cors";
-// import dotenv from "dotenv";
-// import connectDB from "./db.js";
-// import chatRoutes from "./routes/chat.routes.js";
-
-// dotenv.config();
-// connectDB();
-
-// const app = express();
-// app.use(cors());
-// app.use(express.json());
-
-// app.use("/api/chat", chatRoutes);
-
-// const server = http.createServer(app);
-// const io = new Server(server, {
-//   cors: {
-//     origin: "*",
-//   },
-// });
-
-// io.on("connection", (socket) => {
-//   console.log("New socket connected:", socket.id);
-
-//   socket.on("join-room", (roomId) => {
-//     socket.join(roomId);
-//     console.log(`User joined room: ${roomId}`);
-//   });
-
-//   socket.on("send-message", ({ roomId, message }) => {
-//     io.to(roomId).emit("receive-message", { chatId: roomId, message });
-//   });
-
-//   // 📞 --- CALL STATUS EVENTS ---
-//   socket.on("call-started", ({ roomId, callType, sender }) => {
-//     io.to(roomId).emit("receive-message", {
-//       chatId: roomId,
-//       message: {
-//         sender: "System",
-//         text: `📞 ${sender} started a ${callType} call`,
-//         system: true,
-//       },
-//     });
-//   });
-
-//   socket.on("call-ended", ({ roomId, sender }) => {
-//     io.to(roomId).emit("receive-message", {
-//       chatId: roomId,
-//       message: {
-//         sender: "System",
-//         text: `✅ ${sender}'s call ended`,
-//         system: true,
-//       },
-//     });
-//   });
-
-//   socket.on("call-missed", ({ roomId, sender }) => {
-//     io.to(roomId).emit("receive-message", {
-//       chatId: roomId,
-//       message: {
-//         sender: "System",
-//         text: `❌ Missed call from ${sender}`,
-//         system: true,
-//       },
-//     });
-//   });
-
-//   socket.on("disconnect", () => {
-//     console.log("Socket disconnected:", socket.id);
-//   });
-// });
-
-// const PORT = process.env.PORT || 5000;
-// server.listen(PORT, () => {
-//   console.log(`Server running on port ${PORT}`);
-// });
-
-// import express from "express";
-// import http from "http";
-// import { Server } from "socket.io";
-// import cors from "cors";
-// import dotenv from "dotenv";
-// import cookieParser from "cookie-parser";
-// import connectDB from "./config/db.js";
-// import chatRoutes from "./routes/chat.routes.js";
-// import authRouter from "./routes/auth.routes.js";
-
-// dotenv.config();
-// connectDB();
-
-// const app = express();
-
-// // ✅ Fixed CORS for cookies (withCredentials)
-// app.use(cors({
-//   origin: "http://localhost:5173", // ⚠️ Ensure this matches your frontend URL
-//   methods: ["GET", "POST", "PUT", "DELETE"],
-//   credentials: true
-// }));
-
-// app.use(express.json());
-// app.use(cookieParser());
-
-// // ✅ Health check route (important)
-// app.get("/", (req, res) => {
-//   res.send("Backend is running 🚀");
-// });
-
-// app.use("/api/chat", chatRoutes);
-// app.use("/api/auth", authRouter); // ✅ Auth routes added
-
-// const server = http.createServer(app);
-
-// const io = new Server(server, {
-//   cors: {
-//     origin: "*",
-//   },
-// });
-
-// io.on("connection", (socket) => {
-//   console.log("New socket connected:", socket.id);
-
-//   socket.on("join-room", (roomId) => {
-//     socket.join(roomId);
-//     console.log(`User joined room: ${roomId}`);
-//   });
-
-//   socket.on("send-message", ({ roomId, message }) => {
-//     io.to(roomId).emit("receive-message", { chatId: roomId, message });
-//   });
-
-//   // 📞 --- CALL STATUS EVENTS ---
-//   socket.on("call-started", ({ roomId, callType, sender }) => {
-//     io.to(roomId).emit("receive-message", {
-//       chatId: roomId,
-//       message: {
-//         sender: "System",
-//         text: `📞 ${sender} started a ${callType} call`,
-//         system: true,
-//       },
-//     });
-//   });
-
-//   socket.on("call-ended", ({ roomId, sender }) => {
-//     io.to(roomId).emit("receive-message", {
-//       chatId: roomId,
-//       message: {
-//         sender: "System",
-//         text: `✅ ${sender}'s call ended`,
-//         system: true,
-//       },
-//     });
-//   });
-
-//   socket.on("call-missed", ({ roomId, sender }) => {
-//     io.to(roomId).emit("receive-message", {
-//       chatId: roomId,
-//       message: {
-//         sender: "System",
-//         text: `❌ Missed call from ${sender}`,
-//         system: true,
-//       },
-//     });
-//   });
-
-//   socket.on("disconnect", () => {
-//     console.log("Socket disconnected:", socket.id);
-//   });
-// });
-
-// // ✅ PORT (already correct)
-// const PORT = process.env.PORT || 8000;
-
-// server.listen(PORT, () => {
-//   console.log(`Server running on port ${PORT}`);
-// });
-//  claude code 
-// import express from "express";
-// import http from "http";
-// import { Server } from "socket.io";
-// import cors from "cors";
-// import dotenv from "dotenv";
-// import cookieParser from "cookie-parser";
-// import path from "path";
-// import connectDB from "./config/db.js";
-// import chatRoutes from "./routes/chat.routes.js";
-// import authRouter from "./routes/auth.routes.js";
-// import userRouter from "./routes/user.routes.js";
-// import mediaRouter from "./routes/media.routes.js";
-
-// dotenv.config();
-// connectDB();
-
-// const app = express();
-
-// const allowedOrigins = [
-//   "http://localhost:5173", 
-//   "http://127.0.0.1:5173", 
-//   "http://localhost:5174", 
-//   "https://realtimechatapp-frontend-7uv3.onrender.com" 
-// ];
-
-// app.use(cors({
-//   origin: function (origin, callback) {
-//     if (!origin || allowedOrigins.includes(origin)) {
-//       callback(null, true);
-//     } else {
-//       callback(new Error("Not allowed by CORS"));
-//     }
-//   },
-//   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-//   credentials: true,
-//   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
-// }));
-
-// app.use(express.json());
-// app.use(cookieParser());
-// app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
-
-// app.get("/", (req, res) => res.send("Backend is running 🚀"));
-// app.use("/api/chat", chatRoutes);
-// app.use("/api/auth", authRouter);
-// app.use("/api/user", userRouter);
-// app.use("/api/media", mediaRouter);
-
-// const server = http.createServer(app);
-// const io = new Server(server, {
-//   cors: { origin: allowedOrigins, methods: ["GET", "POST"], credentials: true },
-//   transports: ['websocket', 'polling']
-// });
-
-// io.on("connection", (socket) => {
-//   console.log("New socket connected:", socket.id);
-
-//   socket.on("join-room", (roomId) => {
-//     socket.join(roomId);
-//     console.log(`Socket ${socket.id} joined room: ${roomId}`);
-//   });
-
-//   socket.on("send-message", ({ roomId, message }) => {
-//     io.in(roomId).emit("receive-message", { chatId: roomId, message });
-//   });
-
-//   // ---- CALL SIGNALING FIXED ----
-//   socket.on("call-user", ({ roomId, signal, callType, from }) => {
-//     socket.to(roomId).emit("incoming-call", { from, signal, callType });
-//   });
-
-//   socket.on("answer-call", ({ roomId, signal }) => {
-//     socket.to(roomId).emit("call-accepted", signal);
-//   });
-
-//   socket.on("signal", ({ roomId, signal }) => {
-//     socket.to(roomId).emit("signal", { signal, from: socket.id });
-//   });
-
-//   socket.on("end-call", ({ roomId }) => {
-//     if (roomId) io.in(roomId).emit("end-call");
-//   });
-
-//   socket.on("disconnect", () => {
-//     console.log("Socket disconnected:", socket.id);
-//   });
-// });
-
-// const PORT = process.env.PORT || 8000;
-// server.listen(PORT, () => console.log(`Server running on port ${PORT} 🚀`));
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
@@ -303,95 +5,236 @@ import cors from "cors";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import path from "path";
+import { fileURLToPath } from "url";
 
-import connectDB from "./db.js";
+import connectDB from "./config/db.js";
 import chatRoutes from "./routes/chat.routes.js";
 import authRouter from "./routes/auth.routes.js";
 import userRouter from "./routes/user.routes.js";
 import mediaRouter from "./routes/media.routes.js";
+import User from "./models/user.model.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadsDir = path.join(__dirname, "uploads");
 
 dotenv.config();
 connectDB();
 
 const app = express();
+
 const allowedOrigins = [
-  "http://localhost:5173", 
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5174",
+  "http://localhost:3000",
   "https://realtimechatapp-bchat.netlify.app",
-  "https://realtimechatapp-frontend-7uv3.onrender.com"
+  "https://realtimechatapp-frontend-7uv3.onrender.com",
 ];
 
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow any local origin during development, or any allowed domain
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("http://127.0.0.1:")
+      ) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Permissive for production deployment
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  })
+);
+
 app.use(express.json());
 app.use(cookieParser());
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+app.use("/uploads", express.static(uploadsDir));
 
-app.get("/", (req, res) => res.send("Backend is running 🚀"));
-app.use("/api/chat", chatRoutes);
+// Health check routes
+app.get("/", (req, res) => res.json({ status: "ok", app: "PulseChat API 🚀" }));
+app.get("/api/health", (req, res) => res.json({ status: "healthy", timestamp: new Date() }));
+
+// API Routes
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
+app.use("/api/chat", chatRoutes);
 app.use("/api/media", mediaRouter);
 
 const server = http.createServer(app);
+
 const io = new Server(server, {
-  cors: { origin: allowedOrigins, methods: ["GET", "POST"], credentials: true },
-  transports: ['websocket', 'polling']
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+  transports: ["websocket", "polling"],
 });
 
+// Map of userId -> Set of socket IDs
+const onlineUsers = new Map();
+
 io.on("connection", (socket) => {
-  console.log("Connected:", socket.id);
+  let connectedUserId = null;
 
+  // 1. User Registration (Presence)
+  socket.on("register-user", async (userId) => {
+    if (!userId) return;
+    connectedUserId = userId;
+    socket.join(userId); // Join personal room for 1-to-1 alerts/calls
+
+    if (!onlineUsers.has(userId)) {
+      onlineUsers.set(userId, new Set());
+    }
+    onlineUsers.get(userId).add(socket.id);
+
+    try {
+      await User.findByIdAndUpdate(userId, { isOnline: true });
+    } catch (e) {}
+
+    // Broadcast online status to all connected users
+    io.emit("user-status-changed", { userId, isOnline: true });
+
+    // Send currently online user list to this newly connected socket
+    const onlineUserIds = Array.from(onlineUsers.keys());
+    socket.emit("online-users-list", onlineUserIds);
+  });
+
+  // 2. Chat Rooms
   socket.on("join-room", (roomId) => {
-    socket.join(roomId);
-    console.log(`User ${socket.id} joined room ${roomId}`);
+    if (roomId) {
+      socket.join(roomId);
+    }
   });
 
+  socket.on("leave-room", (roomId) => {
+    if (roomId) {
+      socket.leave(roomId);
+    }
+  });
+
+  // 3. Realtime Messages
   socket.on("send-message", ({ roomId, message }) => {
-    io.in(roomId).emit("receive-message", { chatId: roomId, message });
-  });
-
-  // ---- CALLING LOGIC: MUST USE socket.to(roomId) ----
-  
-  socket.on("call-user", ({ roomId, signal, callType, from }) => {
-    if (roomId) {
-      console.log("Call from:", from, "to room:", roomId);
-      // Yeh signal dusre user ki screen par popup layega
-      socket.to(roomId).emit("incoming-call", { from, signal, callType, roomId });
+    if (roomId && message) {
+      io.in(roomId).emit("receive-message", { chatId: roomId, message });
     }
   });
 
-  socket.on("answer-call", ({ roomId, signal }) => {
+  // 4. Typing Indicators
+  socket.on("typing", ({ roomId, username, userId }) => {
     if (roomId) {
-      console.log("Call answered in room:", roomId);
-      // Yeh signal wapas caller ko jayega connection jodne ke liye
-      socket.to(roomId).emit("call-accepted", signal);
-    }
-  });
-  
-  // Audio se Video pe switch (Renegotiation) ke liye
-  socket.on("webrtc-signal", ({ roomId, signal }) => {
-    if (roomId) {
-      socket.to(roomId).emit("webrtc-signal", signal);
+      socket.to(roomId).emit("user-typing", { roomId, username, userId });
     }
   });
 
-  // Yeh stream ko lagatar judne me madad karega bina toote
-  socket.on("webrtc-ice", ({ roomId, candidate }) => {
+  socket.on("stop-typing", ({ roomId, username, userId }) => {
     if (roomId) {
-      socket.to(roomId).emit("webrtc-ice", candidate);
+      socket.to(roomId).emit("user-stop-typing", { roomId, username, userId });
     }
   });
 
-  socket.on("end-call", ({ roomId }) => {
+  // 5. Message Reactions
+  socket.on("message-reaction", ({ roomId, messageId, emoji, username }) => {
     if (roomId) {
-      // Sabko notification do ki call band karo
-      io.in(roomId).emit("end-call");
+      io.in(roomId).emit("message-reaction-updated", { roomId, messageId, emoji, username });
     }
   });
 
-  socket.on("disconnect", () => {
-    console.log("Disconnected");
+  // 6. Delete Message
+  socket.on("delete-message", ({ roomId, messageId }) => {
+    if (roomId) {
+      io.in(roomId).emit("message-deleted", { roomId, messageId });
+    }
+  });
+
+  // ==========================================
+  // 7. WEBRTC AUDIO & VIDEO CALL SIGNALING
+  // ==========================================
+
+  // A starts call to B
+  socket.on("call-user", ({ recipientId, offer, callType, callerInfo, callRoomId }) => {
+    if (recipientId) {
+      // Send incoming call alert to recipient's personal room
+      io.to(recipientId).emit("incoming-call", {
+        from: callerInfo,
+        offer,
+        callType,
+        callRoomId,
+      });
+    }
+  });
+
+  // B answers the call
+  socket.on("answer-call", ({ to, answer, callRoomId }) => {
+    if (to) {
+      io.to(to).emit("call-answered", { answer, callRoomId });
+    }
+  });
+
+  // ICE Candidate exchange
+  socket.on("ice-candidate", ({ to, candidate, callRoomId }) => {
+    if (to) {
+      io.to(to).emit("ice-candidate", { candidate, callRoomId });
+    }
+  });
+
+  // Reject / Decline call
+  socket.on("reject-call", ({ to, reason, callRoomId }) => {
+    if (to) {
+      io.to(to).emit("call-rejected", { reason, callRoomId });
+    }
+  });
+
+  // End active call
+  socket.on("end-call", ({ to, callRoomId }) => {
+    if (to) {
+      io.to(to).emit("call-ended", { callRoomId });
+    }
+    if (callRoomId) {
+      socket.to(callRoomId).emit("call-ended", { callRoomId });
+    }
+  });
+
+  // Toggle audio / video status in call
+  socket.on("toggle-media", ({ to, mediaType, isEnabled, callRoomId }) => {
+    if (to) {
+      io.to(to).emit("remote-media-toggled", { mediaType, isEnabled, callRoomId });
+    }
+  });
+
+  // 8. Disconnect
+  socket.on("disconnect", async () => {
+    if (connectedUserId && onlineUsers.has(connectedUserId)) {
+      const userSockets = onlineUsers.get(connectedUserId);
+      userSockets.delete(socket.id);
+
+      if (userSockets.size === 0) {
+        onlineUsers.delete(connectedUserId);
+        try {
+          await User.findByIdAndUpdate(connectedUserId, {
+            isOnline: false,
+            lastSeen: new Date(),
+          });
+        } catch (e) {}
+        io.emit("user-status-changed", {
+          userId: connectedUserId,
+          isOnline: false,
+          lastSeen: new Date(),
+        });
+      }
+    }
   });
 });
 
 const PORT = process.env.PORT || 8000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`🚀 PulseChat Server running on port ${PORT}`);
+});

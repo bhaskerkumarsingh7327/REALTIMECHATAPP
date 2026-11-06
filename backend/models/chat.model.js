@@ -1,36 +1,35 @@
-// import mongoose from "mongoose";
-
-// const messageSchema = new mongoose.Schema({
-//   sender: { type: String, required: true },
-//   text: { type: String, required: true },
-//   createdAt: { type: Date, default: Date.now },
-// });
-
-
-// const chatSchema = new mongoose.Schema({
-//   name: { type: String, required: true },
-//   avatar: { type: String, default: "" },
-//   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-//   messages: [messageSchema],
-//   createdAt: { type: Date, default: Date.now },
-// });
-
-// export default mongoose.model("Chat", chatSchema);
 import mongoose from "mongoose";
+
+const reactionSchema = new mongoose.Schema(
+  {
+    emoji: { type: String, required: true },
+    username: { type: String, required: true },
+    userId: { type: String },
+  },
+  { _id: false }
+);
 
 const messageSchema = new mongoose.Schema({
   sender: { type: String, required: true },
+  senderId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   text: { type: String, default: "" },
   mediaUrl: { type: String, default: "" },
-  mediaType: { type: String, default: "" },
+  mediaType: { type: String, default: "text" }, // text, image, audio, video, file, system
+  fileName: { type: String, default: "" },
+  fileSize: { type: String, default: "" },
+  reactions: [reactionSchema],
+  system: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
 });
 
-const chatSchema = new mongoose.Schema({
-  // dono users ke IDs — shared chat
-  members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }],
-  messages: [messageSchema],
-  createdAt: { type: Date, default: Date.now },
-});
+const chatSchema = new mongoose.Schema(
+  {
+    members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }],
+    messages: [messageSchema],
+    lastMessage: { type: String, default: "" },
+    lastMessageAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true }
+);
 
 export default mongoose.model("Chat", chatSchema);

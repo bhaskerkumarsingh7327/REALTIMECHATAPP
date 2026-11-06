@@ -1,46 +1,15 @@
-// import mongoose from "mongoose";
-
-// const userSchema = new mongoose.Schema({
-//     name:{
-//         type:String
-    
-//     },
-//     username:{
-//         type:String,
-//         required:true,
-//         unique:true,
-//     },
-//        email:{
-//         type:String,
-//         required:true,
-//         unique:true,
-//     },
-//        password:{
-//         type:String,
-//         required:true,
-     
-//     },
-//     image:{
-//         type:String,
-//         default:""
-
-//     }
-// },{timestamps:true})
-
-
-// const user=mongoose.model("user" ,userSchema);
-
-// export default user;
-
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
-    name: { type: String },
-    username: { type: String, required: true, unique: true },
-    email: { type: String, required: true, unique: true },
+    name: { type: String, default: "" },
+    username: { type: String, required: true, unique: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
     avatar: { type: String, default: "" },
+    about: { type: String, default: "Hey there! I am using PulseChat." },
+    isOnline: { type: Boolean, default: false },
+    lastSeen: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

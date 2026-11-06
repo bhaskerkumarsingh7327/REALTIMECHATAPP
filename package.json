@@ -1,4 +1,13 @@
 {
+  "name": "pulsechat-nexus",
+  "version": "2.0.0",
+  "description": "PulseChat - Next-Gen Realtime Voice, Video & Neural Messaging Platform",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start"
+  },
   "dependencies": {
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
