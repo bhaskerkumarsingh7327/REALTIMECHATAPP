@@ -101,36 +101,56 @@ export default function Home() {
     socket.userUsername = userData.username;
     socket.userAvatar = userData.avatar;
 
+    const registerUserSocket = () => {
+      const uid = String(userData._id);
+      console.log("[SOCKET] Registering user presence on socket:", uid);
+      socket.emit("register-user", uid);
+    };
+
     socket.on("connect", () => {
-      console.log("Connected to PulseChat Realtime Gateway 🚀");
-      socket.emit("register-user", userData._id);
+      console.log("[SOCKET] Connected to PulseChat Realtime Gateway 🚀 Socket ID:", socket.id);
+      registerUserSocket();
     });
+
+    if (socket.connected) {
+      registerUserSocket();
+    }
 
     // Online presence tracking
     socket.on("online-users-list", (userIds) => {
-      setOnlineUsers(new Set(userIds));
+      console.log("[SOCKET] Initial online users:", userIds);
+      setOnlineUsers(new Set(userIds.map(String)));
     });
 
     socket.on("user-status-changed", ({ userId, isOnline }) => {
+      const uStr = String(userId);
       setOnlineUsers((prev) => {
         const next = new Set(prev);
-        if (isOnline) next.add(userId);
-        else next.delete(userId);
+        if (isOnline) next.add(uStr);
+        else next.delete(uStr);
         return next;
       });
     });
 
-    // Receive Message
+    // Receive Message (Realtime)
     socket.on("receive-message", ({ chatId, message }) => {
+      console.log("[SOCKET] Received message in chat:", chatId, message);
       if (message.sender !== userData.username) {
         sounds.playMessageReceived();
       }
 
-      setChats((prev) =>
-        prev.map((c) => {
-          if (c._id === chatId) {
-            const exists = c.messages?.some((m) => m._id === message._id);
-            const msgs = exists ? c.messages : [...(c.messages || []), message];
+      setChats((prev) => {
+        const exists = prev.some((c) => String(c._id) === String(chatId));
+        if (!exists) {
+          // If this is a new incoming chat, reload chats from server
+          fetchChats();
+          return prev;
+        }
+
+        return prev.map((c) => {
+          if (String(c._id) === String(chatId)) {
+            const isDup = c.messages?.some((m) => m._id === message._id);
+            const msgs = isDup ? c.messages : [...(c.messages || []), message];
             return {
               ...c,
               messages: msgs,
@@ -139,13 +159,13 @@ export default function Home() {
             };
           }
           return c;
-        })
-      );
+        });
+      });
 
       setSelectedChat((prev) => {
-        if (prev && prev._id === chatId) {
-          const exists = prev.messages?.some((m) => m._id === message._id);
-          if (exists) return prev;
+        if (prev && String(prev._id) === String(chatId)) {
+          const isDup = prev.messages?.some((m) => m._id === message._id);
+          if (isDup) return prev;
           return {
             ...prev,
             messages: [...(prev.messages || []), message],
@@ -155,10 +175,19 @@ export default function Home() {
       });
     });
 
+    // Realtime New Chat Alert
+    socket.on("new-chat-received", (newChat) => {
+      console.log("[SOCKET] New chat received from contact:", newChat);
+      if (newChat && newChat._id) {
+        setChats((prev) => [newChat, ...prev.filter((c) => String(c._id) !== String(newChat._id))]);
+        socket.emit("join-room", newChat._id);
+      }
+    });
+
     // Typing indicators
     socket.on("user-typing", ({ roomId, username }) => {
       setSelectedChat((current) => {
-        if (current && current._id === roomId) {
+        if (current && String(current._id) === String(roomId)) {
           setRemoteTypingUser(username);
         }
         return current;
@@ -167,7 +196,7 @@ export default function Home() {
 
     socket.on("user-stop-typing", ({ roomId }) => {
       setSelectedChat((current) => {
-        if (current && current._id === roomId) {
+        if (current && String(current._id) === String(roomId)) {
           setRemoteTypingUser(null);
         }
         return current;
@@ -192,19 +221,20 @@ export default function Home() {
           return m;
         });
 
-      setSelectedChat((prev) => (prev && prev._id === roomId ? { ...prev, messages: updateMsgs(prev.messages) } : prev));
-      setChats((prev) => prev.map((c) => (c._id === roomId ? { ...c, messages: updateMsgs(c.messages) } : c)));
+      setSelectedChat((prev) => (prev && String(prev._id) === String(roomId) ? { ...prev, messages: updateMsgs(prev.messages) } : prev));
+      setChats((prev) => prev.map((c) => (String(c._id) === String(roomId) ? { ...c, messages: updateMsgs(c.messages) } : c)));
     });
 
     // Message Deleted
     socket.on("message-deleted", ({ roomId, messageId }) => {
       const removeMsg = (msgs) => msgs?.filter((m) => m._id !== messageId);
-      setSelectedChat((prev) => (prev && prev._id === roomId ? { ...prev, messages: removeMsg(prev.messages) } : prev));
-      setChats((prev) => prev.map((c) => (c._id === roomId ? { ...c, messages: removeMsg(c.messages) } : c)));
+      setSelectedChat((prev) => (prev && String(prev._id) === String(roomId) ? { ...prev, messages: removeMsg(prev.messages) } : prev));
+      setChats((prev) => prev.map((c) => (String(c._id) === String(roomId) ? { ...c, messages: removeMsg(c.messages) } : c)));
     });
 
     // Incoming WebRTC Call
     socket.on("incoming-call", ({ from, offer, callType: cType }) => {
+      console.log("[SOCKET] Incoming call alert from:", from, "Type:", cType);
       setCallerInfo(from);
       setIncomingOffer(offer);
       setCallType(cType || "video");
@@ -326,6 +356,7 @@ export default function Home() {
       socketRef.current?.emit("send-message", {
         roomId: selectedChat._id,
         message: saved,
+        recipientId: currentPartner?._id,
       });
 
       setSelectedChat((prev) => ({
@@ -378,6 +409,7 @@ export default function Home() {
       socketRef.current?.emit("send-message", {
         roomId: selectedChat._id,
         message: saved,
+        recipientId: currentPartner?._id,
       });
 
       setSelectedChat((prev) => ({
@@ -440,6 +472,7 @@ export default function Home() {
       socketRef.current?.emit("send-message", {
         roomId: selectedChat._id,
         message: saved,
+        recipientId: currentPartner?._id,
       });
 
       setSelectedChat((prev) => ({
@@ -606,6 +639,10 @@ export default function Home() {
 
       if (socketRef.current) {
         socketRef.current.emit("join-room", newChat._id);
+        socketRef.current.emit("new-chat-created", {
+          recipientId: targetUser._id,
+          chat: newChat,
+        });
       }
     } catch (err) {
       console.error("Start chat error:", err);
@@ -614,8 +651,14 @@ export default function Home() {
 
   // Helper to extract the other user in a 1-to-1 chat
   const getChatPartner = (chat) => {
-    if (chat?.isAIChat) return PULSE_AI_USER;
-    return chat?.members?.find((m) => m._id !== userData?._id) || { username: "User", name: "User" };
+    if (!chat) return null;
+    if (chat.isAIChat) return PULSE_AI_USER;
+    const currentId = String(userData?._id || userData?.id || "");
+    const partner = chat.members?.find((m) => {
+      const memberId = String(m?._id || m || "");
+      return memberId && memberId !== currentId;
+    });
+    return partner || { username: "User", name: "User" };
   };
 
   const getMediaUrl = (url) => {
@@ -627,7 +670,11 @@ export default function Home() {
   };
 
   const currentPartner = selectedChat ? getChatPartner(selectedChat) : null;
-  const isPartnerOnline = currentPartner ? (currentPartner._id === PULSE_AI_USER._id ? true : onlineUsers.has(currentPartner._id)) : false;
+  const isPartnerOnline = currentPartner
+    ? currentPartner._id === PULSE_AI_USER._id
+      ? true
+      : onlineUsers.has(String(currentPartner._id))
+    : false;
 
   return (
     <div className="fixed inset-0 flex h-[100dvh] w-full bg-[#0a0d14] text-white overflow-hidden font-sans select-none">
@@ -1136,6 +1183,7 @@ export default function Home() {
         callerInfo={callerInfo}
         incomingOffer={incomingOffer}
         socket={socketRef.current}
+        currentUser={userData}
         onEndCall={(reason) => {
           setCallState("idle");
           setCallerInfo(null);

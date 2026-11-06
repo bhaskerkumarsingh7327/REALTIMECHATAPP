@@ -13,6 +13,7 @@ import authRouter from "./routes/auth.routes.js";
 import userRouter from "./routes/user.routes.js";
 import mediaRouter from "./routes/media.routes.js";
 import User from "./models/user.model.js";
+import Chat from "./models/chat.model.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,17 +37,8 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow any local origin during development, or any allowed domain
-      if (
-        !origin ||
-        allowedOrigins.includes(origin) ||
-        origin.startsWith("http://localhost:") ||
-        origin.startsWith("http://127.0.0.1:")
-      ) {
-        callback(null, true);
-      } else {
-        callback(null, true); // Permissive for production deployment
-      }
+      // Permissive CORS to allow connections across laptops, local IPs, and deployed domains
+      callback(null, true);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -59,7 +51,7 @@ app.use(cookieParser());
 app.use("/uploads", express.static(uploadsDir));
 
 // Health check routes
-app.get("/", (req, res) => res.json({ status: "ok", app: "PulseChat API 🚀" }));
+app.get("/", (req, res) => res.json({ status: "ok", app: "PulseChat API 🚀", time: new Date() }));
 app.get("/api/health", (req, res) => res.json({ status: "healthy", timestamp: new Date() }));
 
 // API Routes
@@ -88,20 +80,23 @@ io.on("connection", (socket) => {
   // 1. User Registration (Presence)
   socket.on("register-user", async (userId) => {
     if (!userId) return;
-    connectedUserId = userId;
-    socket.join(userId); // Join personal room for 1-to-1 alerts/calls
+    const uidStr = String(userId);
+    connectedUserId = uidStr;
+    socket.join(uidStr); // Join personal room for 1-to-1 alerts/calls
 
-    if (!onlineUsers.has(userId)) {
-      onlineUsers.set(userId, new Set());
+    if (!onlineUsers.has(uidStr)) {
+      onlineUsers.set(uidStr, new Set());
     }
-    onlineUsers.get(userId).add(socket.id);
+    onlineUsers.get(uidStr).add(socket.id);
+
+    console.log(`[USER ONLINE] ${uidStr} connected (Socket: ${socket.id}). Active users: ${onlineUsers.size}`);
 
     try {
-      await User.findByIdAndUpdate(userId, { isOnline: true });
+      await User.findByIdAndUpdate(uidStr, { isOnline: true });
     } catch (e) {}
 
     // Broadcast online status to all connected users
-    io.emit("user-status-changed", { userId, isOnline: true });
+    io.emit("user-status-changed", { userId: uidStr, isOnline: true });
 
     // Send currently online user list to this newly connected socket
     const onlineUserIds = Array.from(onlineUsers.keys());
@@ -111,59 +106,96 @@ io.on("connection", (socket) => {
   // 2. Chat Rooms
   socket.on("join-room", (roomId) => {
     if (roomId) {
-      socket.join(roomId);
+      socket.join(String(roomId));
     }
   });
 
   socket.on("leave-room", (roomId) => {
     if (roomId) {
-      socket.leave(roomId);
+      socket.leave(String(roomId));
     }
   });
 
-  // 3. Realtime Messages
-  socket.on("send-message", ({ roomId, message }) => {
+  // 3. Realtime Messages (Dual broadcast: room + members' personal rooms)
+  socket.on("send-message", async ({ roomId, message, recipientId }) => {
     if (roomId && message) {
-      io.in(roomId).emit("receive-message", { chatId: roomId, message });
+      const roomStr = String(roomId);
+      console.log(`[MESSAGE] Room: ${roomStr}, Sender: ${message.sender}`);
+
+      // Emit to chat room (for whoever is active in the chat)
+      io.in(roomStr).emit("receive-message", { chatId: roomStr, message });
+
+      // Direct delivery to recipient personal room
+      if (recipientId) {
+        io.to(String(recipientId)).emit("receive-message", { chatId: roomStr, message });
+      }
+
+      // Also deliver to all chat members via database lookup
+      try {
+        const chat = await Chat.findById(roomStr).select("members");
+        if (chat && chat.members) {
+          chat.members.forEach((m) => {
+            const mId = m.toString();
+            io.to(mId).emit("receive-message", { chatId: roomStr, message });
+          });
+        }
+      } catch (err) {
+        console.error("Error looking up chat members:", err);
+      }
     }
   });
 
-  // 4. Typing Indicators
-  socket.on("typing", ({ roomId, username, userId }) => {
+  // 4. New Chat Alert (notifies recipient to load newly created chat)
+  socket.on("new-chat-created", ({ recipientId, chat }) => {
+    if (recipientId && chat) {
+      io.to(String(recipientId)).emit("new-chat-received", chat);
+    }
+  });
+
+  // 5. Typing Indicators
+  socket.on("typing", ({ roomId, username, userId, recipientId }) => {
     if (roomId) {
-      socket.to(roomId).emit("user-typing", { roomId, username, userId });
+      socket.to(String(roomId)).emit("user-typing", { roomId, username, userId });
+    }
+    if (recipientId) {
+      io.to(String(recipientId)).emit("user-typing", { roomId, username, userId });
     }
   });
 
-  socket.on("stop-typing", ({ roomId, username, userId }) => {
+  socket.on("stop-typing", ({ roomId, username, userId, recipientId }) => {
     if (roomId) {
-      socket.to(roomId).emit("user-stop-typing", { roomId, username, userId });
+      socket.to(String(roomId)).emit("user-stop-typing", { roomId, username, userId });
+    }
+    if (recipientId) {
+      io.to(String(recipientId)).emit("user-stop-typing", { roomId, username, userId });
     }
   });
 
-  // 5. Message Reactions
+  // 6. Message Reactions
   socket.on("message-reaction", ({ roomId, messageId, emoji, username }) => {
     if (roomId) {
-      io.in(roomId).emit("message-reaction-updated", { roomId, messageId, emoji, username });
+      io.in(String(roomId)).emit("message-reaction-updated", { roomId, messageId, emoji, username });
     }
   });
 
-  // 6. Delete Message
+  // 7. Delete Message
   socket.on("delete-message", ({ roomId, messageId }) => {
     if (roomId) {
-      io.in(roomId).emit("message-deleted", { roomId, messageId });
+      io.in(String(roomId)).emit("message-deleted", { roomId, messageId });
     }
   });
 
   // ==========================================
-  // 7. WEBRTC AUDIO & VIDEO CALL SIGNALING
+  // 8. WEBRTC AUDIO & VIDEO CALL SIGNALING
   // ==========================================
 
   // A starts call to B
   socket.on("call-user", ({ recipientId, offer, callType, callerInfo, callRoomId }) => {
     if (recipientId) {
-      // Send incoming call alert to recipient's personal room
-      io.to(recipientId).emit("incoming-call", {
+      const target = String(recipientId);
+      console.log(`[CALL] Offer from ${callerInfo?.username} (${callerInfo?._id}) -> ${target} (${callType})`);
+      // Send incoming call alert directly to recipient's personal room
+      io.to(target).emit("incoming-call", {
         from: callerInfo,
         offer,
         callType,
@@ -175,42 +207,49 @@ io.on("connection", (socket) => {
   // B answers the call
   socket.on("answer-call", ({ to, answer, callRoomId }) => {
     if (to) {
-      io.to(to).emit("call-answered", { answer, callRoomId });
+      const target = String(to);
+      console.log(`[CALL] Answer from socket -> ${target}`);
+      io.to(target).emit("call-answered", { answer, callRoomId });
     }
   });
 
   // ICE Candidate exchange
   socket.on("ice-candidate", ({ to, candidate, callRoomId }) => {
     if (to) {
-      io.to(to).emit("ice-candidate", { candidate, callRoomId });
+      const target = String(to);
+      io.to(target).emit("ice-candidate", { candidate, callRoomId });
     }
   });
 
   // Reject / Decline call
   socket.on("reject-call", ({ to, reason, callRoomId }) => {
     if (to) {
-      io.to(to).emit("call-rejected", { reason, callRoomId });
+      const target = String(to);
+      console.log(`[CALL] Rejected -> ${target}`);
+      io.to(target).emit("call-rejected", { reason, callRoomId });
     }
   });
 
   // End active call
   socket.on("end-call", ({ to, callRoomId }) => {
     if (to) {
-      io.to(to).emit("call-ended", { callRoomId });
+      const target = String(to);
+      console.log(`[CALL] Ended -> ${target}`);
+      io.to(target).emit("call-ended", { callRoomId });
     }
     if (callRoomId) {
-      socket.to(callRoomId).emit("call-ended", { callRoomId });
+      socket.to(String(callRoomId)).emit("call-ended", { callRoomId });
     }
   });
 
   // Toggle audio / video status in call
   socket.on("toggle-media", ({ to, mediaType, isEnabled, callRoomId }) => {
     if (to) {
-      io.to(to).emit("remote-media-toggled", { mediaType, isEnabled, callRoomId });
+      io.to(String(to)).emit("remote-media-toggled", { mediaType, isEnabled, callRoomId });
     }
   });
 
-  // 8. Disconnect
+  // 9. Disconnect
   socket.on("disconnect", async () => {
     if (connectedUserId && onlineUsers.has(connectedUserId)) {
       const userSockets = onlineUsers.get(connectedUserId);
@@ -218,6 +257,7 @@ io.on("connection", (socket) => {
 
       if (userSockets.size === 0) {
         onlineUsers.delete(connectedUserId);
+        console.log(`[USER OFFLINE] ${connectedUserId} disconnected`);
         try {
           await User.findByIdAndUpdate(connectedUserId, {
             isOnline: false,

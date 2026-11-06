@@ -16,6 +16,9 @@ const ICE_SERVERS = {
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
     { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:global.stun.twilio.com:3478" },
   ],
 };
 
@@ -25,6 +28,7 @@ export default function CallModal({
   peerUser, // { _id, username, name, avatar }
   callerInfo, // { _id, username, name, avatar }
   socket,
+  currentUser,
   incomingOffer,
   onEndCall,
   onCallAccepted,
@@ -40,6 +44,14 @@ export default function CallModal({
   const localStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
   const timerRef = useRef(null);
+  const pendingCandidatesRef = useRef([]);
+
+  // Keep target ID updated in a ref to avoid stale closures in WebRTC callbacks
+  const targetIdRef = useRef(null);
+  useEffect(() => {
+    const tid = callerInfo?._id || peerUser?._id;
+    if (tid) targetIdRef.current = String(tid);
+  }, [callerInfo, peerUser]);
 
   // Format call duration MM:SS
   const formatTime = (secs) => {
@@ -79,24 +91,35 @@ export default function CallModal({
   const setupPeerConnection = () => {
     if (peerConnectionRef.current) return peerConnectionRef.current;
 
+    console.log("[WEBRTC] Creating RTCPeerConnection...");
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peerConnectionRef.current = pc;
 
     // When remote track arrives
     pc.ontrack = (event) => {
-      if (remoteVideoRef.current && event.streams[0]) {
+      console.log("[WEBRTC] Remote track received:", event.track.kind);
+      if (remoteVideoRef.current && event.streams && event.streams[0]) {
         remoteVideoRef.current.srcObject = event.streams[0];
       }
     };
 
     // When ICE candidate is generated
     pc.onicecandidate = (event) => {
-      if (event.candidate && socket) {
-        const targetId = callerInfo?._id || peerUser?._id;
+      if (event.candidate && socket && targetIdRef.current) {
+        console.log("[WEBRTC] Sending local ICE candidate to target:", targetIdRef.current);
         socket.emit("ice-candidate", {
-          to: targetId,
+          to: targetIdRef.current,
           candidate: event.candidate,
         });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log("[WEBRTC] Connection state:", pc.connectionState);
+      if (pc.connectionState === "connected") {
+        if (onCallAccepted) onCallAccepted();
+      } else if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+        console.warn("[WEBRTC] Connection lost or failed.");
       }
     };
 
@@ -118,6 +141,7 @@ export default function CallModal({
             : false,
       };
 
+      console.log("[WEBRTC] Requesting user media:", constraints);
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       localStreamRef.current = stream;
 
@@ -127,19 +151,16 @@ export default function CallModal({
 
       return stream;
     } catch (err) {
-      console.warn("Could not get requested media:", err);
-      // Fallback to audio-only if video fails (e.g. no camera or permission denied)
-      if (type === "video") {
-        try {
-          const audioOnlyStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          localStreamRef.current = audioOnlyStream;
-          setIsVideoDisabled(true);
-          return audioOnlyStream;
-        } catch (e) {
-          throw e;
-        }
+      console.warn("[WEBRTC] Could not get requested media, attempting audio-only fallback:", err);
+      try {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localStreamRef.current = audioStream;
+        setIsVideoDisabled(true);
+        return audioStream;
+      } catch (audioErr) {
+        console.error("[WEBRTC] Microphone access denied or unavailable:", audioErr);
+        throw audioErr;
       }
-      throw err;
     }
   };
 
@@ -159,20 +180,24 @@ export default function CallModal({
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
 
+          const target = String(peerUser._id);
+          targetIdRef.current = target;
+
+          console.log(`[WEBRTC] Sending call offer to ${target}...`);
           socket.emit("call-user", {
-            recipientId: peerUser._id,
+            recipientId: target,
             offer,
             callType,
             callerInfo: {
-              _id: socket.userId,
-              name: socket.userName,
-              username: socket.userUsername,
-              avatar: socket.userAvatar,
+              _id: String(currentUser?._id || socket.userId),
+              name: currentUser?.name || currentUser?.username || socket.userName,
+              username: currentUser?.username || socket.userUsername,
+              avatar: currentUser?.avatar || socket.userAvatar,
             },
           });
         } catch (err) {
-          console.error("Failed to start outgoing call:", err);
-          onEndCall();
+          console.error("[WEBRTC] Failed to start outgoing call:", err);
+          onEndCall("Microphone/Camera access is required for calling.");
         }
       };
 
@@ -190,14 +215,24 @@ export default function CallModal({
 
     // Recipient answered the call
     const handleCallAnswered = async ({ answer }) => {
+      console.log("[WEBRTC] Recipient accepted call, applying remote description...");
       sounds.stopAllSounds();
       const pc = peerConnectionRef.current;
       if (pc && pc.signalingState !== "closed") {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+          // Apply any pending candidates received before answer
+          for (const cand of pendingCandidatesRef.current) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (e) {}
+          }
+          pendingCandidatesRef.current = [];
+
           if (onCallAccepted) onCallAccepted();
         } catch (err) {
-          console.error("Error setting remote description:", err);
+          console.error("[WEBRTC] Error setting remote description for answer:", err);
         }
       }
     };
@@ -209,13 +244,16 @@ export default function CallModal({
         try {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (e) {
-          console.warn("Error adding ice candidate:", e);
+          console.warn("[WEBRTC] Error adding ice candidate:", e);
         }
+      } else if (candidate) {
+        pendingCandidatesRef.current.push(candidate);
       }
     };
 
     // Call was rejected by recipient
     const handleCallRejected = () => {
+      console.log("[WEBRTC] Call was declined by recipient.");
       sounds.stopAllSounds();
       sounds.playCallEnded();
       cleanupMedia();
@@ -224,6 +262,7 @@ export default function CallModal({
 
     // Call was ended by remote party
     const handleCallEnded = () => {
+      console.log("[WEBRTC] Remote party ended call.");
       sounds.stopAllSounds();
       sounds.playCallEnded();
       cleanupMedia();
@@ -232,7 +271,7 @@ export default function CallModal({
 
     // Remote media status changed
     const handleRemoteMediaToggled = ({ mediaType: mType, isEnabled }) => {
-      // Can show notification if needed
+      console.log(`[WEBRTC] Remote party toggled ${mType}: ${isEnabled}`);
     };
 
     socket.on("call-answered", handleCallAnswered);
@@ -253,7 +292,14 @@ export default function CallModal({
   // 2. ACCEPT INCOMING CALL
   const handleAcceptCall = async () => {
     sounds.stopAllSounds();
+    const target = targetIdRef.current;
+    if (!target) {
+      console.error("[WEBRTC] No caller target ID found to accept call.");
+      return;
+    }
+
     try {
+      console.log("[WEBRTC] Accepting incoming call from:", target);
       const stream = await getMediaStream(callType);
       const pc = setupPeerConnection();
 
@@ -261,18 +307,27 @@ export default function CallModal({
 
       if (incomingOffer) {
         await pc.setRemoteDescription(new RTCSessionDescription(incomingOffer));
+
+        // Process any queued candidates received before acceptance
+        for (const cand of pendingCandidatesRef.current) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(cand));
+          } catch (e) {}
+        }
+        pendingCandidatesRef.current = [];
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
         socket.emit("answer-call", {
-          to: callerInfo._id,
+          to: target,
           answer,
         });
 
         if (onCallAccepted) onCallAccepted();
       }
     } catch (err) {
-      console.error("Error accepting call:", err);
+      console.error("[WEBRTC] Error accepting call:", err);
       handleRejectCall();
     }
   };
@@ -280,9 +335,10 @@ export default function CallModal({
   // 3. REJECT INCOMING CALL
   const handleRejectCall = () => {
     sounds.stopAllSounds();
-    if (socket && callerInfo?._id) {
+    const target = targetIdRef.current;
+    if (socket && target) {
       socket.emit("reject-call", {
-        to: callerInfo._id,
+        to: target,
         reason: "Call declined",
       });
     }
@@ -295,9 +351,9 @@ export default function CallModal({
     sounds.stopAllSounds();
     sounds.playCallEnded();
 
-    const targetId = callerInfo?._id || peerUser?._id;
-    if (socket && targetId) {
-      socket.emit("end-call", { to: targetId });
+    const target = targetIdRef.current;
+    if (socket && target) {
+      socket.emit("end-call", { to: target });
     }
 
     cleanupMedia();
@@ -322,6 +378,7 @@ export default function CallModal({
     }
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    pendingCandidatesRef.current = [];
   };
 
   // TOGGLE MIC
@@ -331,12 +388,14 @@ export default function CallModal({
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsMuted(!audioTrack.enabled);
-        const targetId = callerInfo?._id || peerUser?._id;
-        socket?.emit("toggle-media", {
-          to: targetId,
-          mediaType: "audio",
-          isEnabled: audioTrack.enabled,
-        });
+        const target = targetIdRef.current;
+        if (target) {
+          socket?.emit("toggle-media", {
+            to: target,
+            mediaType: "audio",
+            isEnabled: audioTrack.enabled,
+          });
+        }
       }
     }
   };
@@ -371,12 +430,14 @@ export default function CallModal({
         }
       }
 
-      const targetId = callerInfo?._id || peerUser?._id;
-      socket?.emit("toggle-media", {
-        to: targetId,
-        mediaType: "video",
-        isEnabled: !isVideoDisabled,
-      });
+      const target = targetIdRef.current;
+      if (target) {
+        socket?.emit("toggle-media", {
+          to: target,
+          mediaType: "video",
+          isEnabled: !isVideoDisabled,
+        });
+      }
     }
   };
 
@@ -684,4 +745,3 @@ export default function CallModal({
     </div>
   );
 }
-
