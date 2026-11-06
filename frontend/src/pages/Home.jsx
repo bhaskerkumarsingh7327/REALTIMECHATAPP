@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useNavigate, Link } from "react-router-dom";
-import { clearUserData } from "../redux/userSlice";
+import { clearUserData, setUserData } from "../redux/userSlice";
 import io from "socket.io-client";
 import axios from "axios";
 import { serverUrl } from "../main";
@@ -30,9 +30,33 @@ import {
   IconSparkles,
   IconInfo,
   IconMaximize,
+  IconCopy,
+  IconBan,
 } from "../components/Icons";
 import { sounds } from "../utils/soundEffects";
 import { PULSE_AI_USER, generateAIResponse } from "../utils/aiBot";
+
+// Helper for relative time formatting (e.g., "just now", "2m ago", "1h ago", "yesterday")
+function formatRelativeTime(dateInput) {
+  if (!dateInput) return "";
+  const date = new Date(dateInput);
+  const now = new Date();
+  const diffMs = now - date;
+  if (diffMs < 0) return "just now";
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSecs < 60) return "just now";
+  if (diffMins === 1) return "1m ago";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours === 1) return "1h ago";
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return "yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
 
 export default function Home() {
   const dispatch = useDispatch();
@@ -58,6 +82,7 @@ export default function Home() {
   const [isMutedSounds, setIsMutedSounds] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
   const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
+  const [copiedMsgId, setCopiedMsgId] = useState(null);
 
   // WebRTC Calling State
   const [callState, setCallState] = useState("idle"); // 'idle' | 'outgoing' | 'incoming' | 'in-call'
@@ -133,7 +158,7 @@ export default function Home() {
       setOnlineUsers(new Set(userIds.map(String)));
     });
 
-    socket.on("user-status-changed", ({ userId, isOnline }) => {
+    socket.on("user-status-changed", ({ userId, isOnline, lastSeen }) => {
       const uStr = String(userId);
       setOnlineUsers((prev) => {
         const next = new Set(prev);
@@ -141,6 +166,16 @@ export default function Home() {
         else next.delete(uStr);
         return next;
       });
+
+      // Update lastSeen in chat contacts
+      setChats((prev) =>
+        prev.map((c) => ({
+          ...c,
+          members: c.members?.map((m) =>
+            String(m?._id || m) === uStr ? { ...m, isOnline, lastSeen: lastSeen || new Date() } : m
+          ),
+        }))
+      );
     });
 
     // Receive Message (Realtime)
@@ -183,6 +218,40 @@ export default function Home() {
         }
         return prev;
       });
+    });
+
+    // Realtime Read Receipts / Seen status
+    socket.on("messages-seen-updated", ({ roomId, userId, seenAt }) => {
+      const updateSeen = (msgs) =>
+        msgs?.map((m) => {
+          if (m.sender === userData.username || (m.senderId && String(m.senderId) !== String(userId))) {
+            return { ...m, seen: true, seenAt: seenAt || m.seenAt || new Date() };
+          }
+          return m;
+        });
+
+      setSelectedChat((prev) =>
+        prev && String(prev._id) === String(roomId) ? { ...prev, messages: updateSeen(prev.messages) } : prev
+      );
+
+      setChats((prev) =>
+        prev.map((c) => (String(c._id) === String(roomId) ? { ...c, messages: updateSeen(c.messages) } : c))
+      );
+    });
+
+    // Realtime Chat Cleared
+    socket.on("chat-cleared", ({ roomId }) => {
+      setSelectedChat((prev) =>
+        prev && String(prev._id) === String(roomId) ? { ...prev, messages: [] } : prev
+      );
+      setChats((prev) =>
+        prev.map((c) => (String(c._id) === String(roomId) ? { ...c, messages: [], lastMessage: "Chat cleared" } : c))
+      );
+    });
+
+    // Realtime Block Status changed
+    socket.on("blocked-status-changed", ({ blockerId, isBlocked }) => {
+      console.log("[SOCKET] Block status updated by:", blockerId, isBlocked);
     });
 
     // Realtime New Chat Alert
@@ -292,13 +361,60 @@ export default function Home() {
     }
   };
 
-  // Join selected chat room
+  // Join selected chat room & Mark Messages as Seen
   useEffect(() => {
     if (selectedChat?._id && socketRef.current && !selectedChat.isAIChat) {
       socketRef.current.emit("join-room", selectedChat._id);
     }
     setRemoteTypingUser(null);
   }, [selectedChat?._id]);
+
+  // Mark unseen messages in active chat as seen
+  useEffect(() => {
+    if (!selectedChat?._id || selectedChat.isAIChat || !userData?._id) return;
+
+    const partner = getChatPartner(selectedChat);
+    const hasUnseen = selectedChat.messages?.some(
+      (m) => m.sender !== userData.username && !m.seen
+    );
+
+    if (hasUnseen) {
+      socketRef.current?.emit("mark-as-seen", {
+        roomId: selectedChat._id,
+        userId: userData._id,
+        senderId: partner?._id,
+      });
+
+      axios
+        .post(`${serverUrl}/api/chat/${selectedChat._id}/seen`, {
+          userId: userData._id,
+        })
+        .catch(() => {});
+
+      const now = new Date();
+      setSelectedChat((prev) => {
+        if (!prev || String(prev._id) !== String(selectedChat._id)) return prev;
+        return {
+          ...prev,
+          messages: prev.messages?.map((m) =>
+            m.sender !== userData.username ? { ...m, seen: true, seenAt: now } : m
+          ),
+        };
+      });
+
+      setChats((prev) =>
+        prev.map((c) => {
+          if (String(c._id) !== String(selectedChat._id)) return c;
+          return {
+            ...c,
+            messages: c.messages?.map((m) =>
+              m.sender !== userData.username ? { ...m, seen: true, seenAt: now } : m
+            ),
+          };
+        })
+      );
+    }
+  }, [selectedChat?._id, selectedChat?.messages?.length, userData?._id]);
 
   // Helper to extract the other user in a 1-to-1 chat
   const getChatPartner = (chat) => {
@@ -319,10 +435,64 @@ export default function Home() {
       : onlineUsers.has(String(currentPartner._id))
     : false;
 
-  // 2. Sending Messages
+  // Block status check
+  const isContactBlockedByMe = currentPartner?._id
+    ? userData?.blockedUsers?.some((b) => String(b?._id || b) === String(currentPartner._id))
+    : false;
+
+  // 2. Block / Unblock Contact
+  const handleToggleBlockContact = async () => {
+    if (!currentPartner?._id || selectedChat?.isAIChat) return;
+
+    const willBlock = !isContactBlockedByMe;
+    const confirmPrompt = willBlock
+      ? `Are you sure you want to block ${currentPartner.name || currentPartner.username}? They won't be able to message or call you.`
+      : `Unblock ${currentPartner.name || currentPartner.username}?`;
+
+    if (!window.confirm(confirmPrompt)) return;
+
+    try {
+      const res = await axios.post(`${serverUrl}/api/user/block`, {
+        targetUserId: currentPartner._id,
+      });
+
+      const isBlockedNow = res.data.isBlocked;
+      dispatch(setUserData(res.data.user));
+
+      socketRef.current?.emit("user-blocked-status", {
+        blockerId: userData._id,
+        targetId: currentPartner._id,
+        isBlocked: isBlockedNow,
+      });
+    } catch (err) {
+      console.error("Block user error:", err);
+    }
+  };
+
+  // 3. Clear Chat History
+  const handleClearChatHistory = async () => {
+    if (!selectedChat?._id || selectedChat.isAIChat) return;
+    try {
+      await axios.post(`${serverUrl}/api/chat/${selectedChat._id}/clear`);
+      setSelectedChat((prev) => ({ ...prev, messages: [] }));
+      setChats((prev) =>
+        prev.map((c) => (c._id === selectedChat._id ? { ...c, messages: [], lastMessage: "Chat cleared" } : c))
+      );
+      socketRef.current?.emit("clear-chat", { roomId: selectedChat._id });
+    } catch (err) {
+      console.error("Clear chat error:", err);
+    }
+  };
+
+  // 4. Sending Messages
   const handleSendMessage = async () => {
     const text = messageText.trim();
     if (!text || !selectedChat) return;
+
+    if (isContactBlockedByMe) {
+      alert("Please unblock this contact before sending a message.");
+      return;
+    }
 
     setMessageText("");
     stopTyping();
@@ -371,6 +541,7 @@ export default function Home() {
         chatId: selectedChat._id,
         sender: userData.username,
         senderId: userData._id,
+        recipientId: currentPartner?._id,
         text,
         mediaType: "text",
       };
@@ -400,13 +571,21 @@ export default function Home() {
       );
     } catch (err) {
       console.error("Send message error:", err);
+      if (err.response?.status === 403) {
+        alert(err.response?.data?.error || "Cannot send message. You may be blocked.");
+      }
     }
   };
 
-  // 3. Media Upload (Photos, Audio, Files)
+  // 5. Media Upload (Photos, Audio, Files)
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !selectedChat) return;
+
+    if (isContactBlockedByMe) {
+      alert("Please unblock this contact before sending media.");
+      return;
+    }
 
     const formData = new FormData();
     formData.append("file", file);
@@ -420,6 +599,7 @@ export default function Home() {
         chatId: selectedChat._id,
         sender: userData.username,
         senderId: userData._id,
+        recipientId: currentPartner?._id,
         text: file.name,
         mediaUrl: fullUrl,
         mediaType,
@@ -462,10 +642,15 @@ export default function Home() {
     }
   };
 
-  // 4. Voice Recording Completed
+  // 6. Voice Recording Completed
   const handleVoiceRecordingComplete = async (audioBlob, durationSec) => {
     setIsRecordingVoice(false);
     if (!audioBlob || !selectedChat) return;
+
+    if (isContactBlockedByMe) {
+      alert("Please unblock this contact before sending voice notes.");
+      return;
+    }
 
     const file = new File([audioBlob], `voice-note-${Date.now()}.webm`, {
       type: "audio/webm",
@@ -483,6 +668,7 @@ export default function Home() {
         chatId: selectedChat._id,
         sender: userData.username,
         senderId: userData._id,
+        recipientId: currentPartner?._id,
         text: `Voice note (${durationSec}s)`,
         mediaUrl: fullUrl,
         mediaType: "audio",
@@ -523,7 +709,7 @@ export default function Home() {
     }
   };
 
-  // 5. Typing Indicators Handling
+  // 7. Typing Indicators Handling
   const handleInputChange = (e) => {
     setMessageText(e.target.value);
 
@@ -556,7 +742,7 @@ export default function Home() {
     }
   };
 
-  // 6. Reactions
+  // 8. Reactions
   const handleReaction = async (messageId, emoji) => {
     setActiveReactionMsgId(null);
     if (!selectedChat || selectedChat.isAIChat) return;
@@ -581,7 +767,7 @@ export default function Home() {
     }
   };
 
-  // 7. Delete Message
+  // 9. Delete Message
   const handleDeleteMessage = async (messageId) => {
     if (!selectedChat || selectedChat.isAIChat) return;
     try {
@@ -599,7 +785,7 @@ export default function Home() {
     }
   };
 
-  // 8. Delete Chat
+  // 10. Delete Chat
   const handleDeleteChat = async () => {
     if (!selectedChat || selectedChat.isAIChat) return;
     if (!window.confirm("Are you sure you want to delete this chat conversation?")) return;
@@ -613,10 +799,14 @@ export default function Home() {
     }
   };
 
-  // 9. Start Calling (WebRTC)
+  // 11. Start Calling (WebRTC)
   const startCall = (type) => {
     if (!selectedChat || selectedChat.isAIChat) {
       alert("Calls are available with registered contacts!");
+      return;
+    }
+    if (isContactBlockedByMe) {
+      alert("Unblock contact to start voice/video calls.");
       return;
     }
     const partner = getChatPartner(selectedChat);
@@ -630,9 +820,9 @@ export default function Home() {
 
   // WhatsApp-style Call Status Notification Generator
   const handleCallEnded = async (callData = {}) => {
-    const duration = typeof callData === "object" ? (callData.duration || 0) : 0;
-    const cType = (typeof callData === "object" && callData.callType) ? callData.callType : callType;
-    const status = (typeof callData === "object" && callData.status) ? callData.status : "completed";
+    const duration = typeof callData === "object" ? callData.duration || 0 : 0;
+    const cType = typeof callData === "object" && callData.callType ? callData.callType : callType;
+    const status = typeof callData === "object" && callData.status ? callData.status : "completed";
 
     setCallState("idle");
     setCallerInfo(null);
@@ -695,7 +885,7 @@ export default function Home() {
     }
   };
 
-  // 10. User Search & New Chat
+  // 12. User Search & New Chat
   const handleUserSearch = async (val) => {
     setSearchFilter(val);
     if (!val.trim()) {
@@ -882,6 +1072,11 @@ export default function Home() {
               const isSelected = selectedChat?._id === chat._id;
               const isOnline = chat.isAIChat ? true : onlineUsers.has(String(partner._id));
 
+              // Compute unread message count
+              const unreadCount = !chat.isAIChat
+                ? chat.messages?.filter((m) => m.sender !== userData?.username && !m.seen).length || 0
+                : 0;
+
               return (
                 <div
                   key={chat._id}
@@ -930,9 +1125,18 @@ export default function Home() {
                       </span>
                     </div>
 
-                    <p className={`text-xs truncate ${isSelected ? "text-violet-100 font-medium" : "text-gray-400"}`}>
-                      {chat.lastMessage || "No messages yet"}
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className={`text-xs truncate ${isSelected ? "text-violet-100 font-medium" : "text-gray-400"}`}>
+                        {chat.lastMessage || "No messages yet"}
+                      </p>
+
+                      {/* Unread message count badge */}
+                      {unreadCount > 0 && !isSelected && (
+                        <span className="ml-2 px-2 py-0.5 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 text-black text-[10px] font-black shadow-md shadow-cyan-500/30 animate-pulse flex-shrink-0">
+                          {unreadCount}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -982,8 +1186,10 @@ export default function Home() {
                     alt={currentPartner?.username}
                     className="w-11 h-11 rounded-full object-cover border-2 border-violet-500/30 group-hover:border-violet-400 transition"
                   />
-                  {isPartnerOnline && (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#0e1322] rounded-full"></span>
+                  {isPartnerOnline ? (
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#0e1322] rounded-full animate-pulse"></span>
+                  ) : (
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-gray-600 border-2 border-[#0e1322] rounded-full"></span>
                   )}
                 </div>
 
@@ -991,6 +1197,11 @@ export default function Home() {
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-sm md:text-base text-white truncate group-hover:text-violet-300 transition flex items-center gap-1.5">
                       <span>{currentPartner?.name || currentPartner?.username}</span>
+                      {isContactBlockedByMe && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-bold border border-red-500/30">
+                          Blocked
+                        </span>
+                      )}
                       {!selectedChat.isAIChat && (
                         <span className="text-[10px] text-gray-500 group-hover:text-violet-400 transition">
                           ↗
@@ -1011,10 +1222,12 @@ export default function Home() {
                     ) : isPartnerOnline ? (
                       <span className="text-emerald-400 font-medium flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                        Active Now • Tap for profile
+                        Active Now
                       </span>
                     ) : (
-                      "Offline • Tap for profile"
+                      <span className="text-gray-400">
+                        Last seen {formatRelativeTime(currentPartner?.lastSeen)}
+                      </span>
                     )}
                   </p>
                 </div>
@@ -1025,17 +1238,27 @@ export default function Home() {
                 {!selectedChat.isAIChat && (
                   <>
                     <button
+                      disabled={isContactBlockedByMe}
                       onClick={() => startCall("audio")}
-                      className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition shadow-sm hover:scale-105 active:scale-95"
-                      title="Start Voice Call"
+                      className={`p-2.5 rounded-xl border transition shadow-sm ${
+                        isContactBlockedByMe
+                          ? "bg-white/[0.02] text-gray-600 border-white/5 cursor-not-allowed"
+                          : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/20 hover:scale-105 active:scale-95"
+                      }`}
+                      title={isContactBlockedByMe ? "Unblock contact to call" : "Start Voice Call"}
                     >
                       <IconPhone className="w-4 h-4" />
                     </button>
 
                     <button
+                      disabled={isContactBlockedByMe}
                       onClick={() => startCall("video")}
-                      className="p-2.5 rounded-xl bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition shadow-sm hover:scale-105 active:scale-95"
-                      title="Start Video Call"
+                      className={`p-2.5 rounded-xl border transition shadow-sm ${
+                        isContactBlockedByMe
+                          ? "bg-white/[0.02] text-gray-600 border-white/5 cursor-not-allowed"
+                          : "bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border-violet-500/20 hover:scale-105 active:scale-95"
+                      }`}
+                      title={isContactBlockedByMe ? "Unblock contact to call" : "Start Video Call"}
                     >
                       <IconVideo className="w-4 h-4" />
                     </button>
@@ -1043,7 +1266,7 @@ export default function Home() {
                     <button
                       onClick={() => setShowProfileModal(true)}
                       className="p-2.5 rounded-xl bg-white/[0.05] text-gray-300 hover:text-white hover:bg-white/10 border border-white/[0.08] transition shadow-sm"
-                      title="Contact Profile & Info"
+                      title="Contact Profile & Shared Media"
                     >
                       <IconInfo className="w-4 h-4" />
                     </button>
@@ -1059,6 +1282,22 @@ export default function Home() {
                 )}
               </div>
             </div>
+
+            {/* BLOCKED CONTACT WARNING BANNER */}
+            {isContactBlockedByMe && (
+              <div className="bg-red-500/15 border-b border-red-500/30 px-4 py-2 flex items-center justify-between text-xs text-red-300 z-20">
+                <div className="flex items-center gap-2">
+                  <IconBan className="w-4 h-4 text-red-400" />
+                  <span>You have blocked this contact. Unblock to message or call.</span>
+                </div>
+                <button
+                  onClick={handleToggleBlockContact}
+                  className="px-3 py-1 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-white font-bold transition text-xs"
+                >
+                  Unblock
+                </button>
+              </div>
+            )}
 
             {/* LIVE ACTIVE CALL BANNER (Appears when call is minimized or ongoing) */}
             {(callState === "in-call" || callState === "outgoing") && (
@@ -1179,9 +1418,9 @@ export default function Home() {
                         </p>
                       )}
 
-                      {/* Message Metadata (Time & Delivery Status) */}
-                      <div className="flex items-center justify-end gap-1.5 mt-1 text-[10px] opacity-75">
-                        <span>
+                      {/* Message Metadata (Time & Delivery/Seen Status) */}
+                      <div className="flex items-center justify-end gap-1.5 mt-1 text-[10px] select-none">
+                        <span className="opacity-75">
                           {msg.createdAt
                             ? new Date(msg.createdAt).toLocaleTimeString([], {
                                 hour: "2-digit",
@@ -1189,10 +1428,25 @@ export default function Home() {
                               })
                             : ""}
                         </span>
+
+                        {/* Read Receipts & Seen Relative Time Indicator */}
                         {isSender && (
-                          <span title="Delivered">
-                            <IconCheckDouble className="w-3.5 h-3.5 text-cyan-300" />
-                          </span>
+                          <div className="flex items-center gap-1">
+                            {msg.seen ? (
+                              <>
+                                <span className="text-[9px] text-cyan-300 font-semibold tracking-tight">
+                                  {msg.seenAt ? `Seen ${formatRelativeTime(msg.seenAt)}` : "Seen"}
+                                </span>
+                                <span title={msg.seenAt ? `Seen ${formatRelativeTime(msg.seenAt)}` : "Seen"}>
+                                  <IconCheckDouble className="w-3.5 h-3.5 text-cyan-400 stroke-[2.5]" />
+                                </span>
+                              </>
+                            ) : (
+                              <span title="Delivered">
+                                <IconCheckDouble className="w-3.5 h-3.5 text-white/50" />
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
 
@@ -1216,7 +1470,7 @@ export default function Home() {
                       )}
                     </div>
 
-                    {/* Quick Reaction Hover Bar */}
+                    {/* Quick Reaction & Copy Hover Bar */}
                     {!selectedChat.isAIChat && (
                       <div
                         className={`absolute -top-7 ${
@@ -1232,10 +1486,27 @@ export default function Home() {
                             {emoji}
                           </button>
                         ))}
+
+                        {/* Copy message text */}
+                        {msg.text && (
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(msg.text);
+                              setCopiedMsgId(msg._id);
+                              setTimeout(() => setCopiedMsgId(null), 1500);
+                            }}
+                            className="p-1 text-gray-400 hover:text-white transition"
+                            title={copiedMsgId === msg._id ? "Copied!" : "Copy message"}
+                          >
+                            <IconCopy className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        {/* Delete message (sender only) */}
                         {isSender && (
                           <button
                             onClick={() => handleDeleteMessage(msg._id)}
-                            className="ml-1 text-gray-400 hover:text-red-400 transition"
+                            className="p-1 text-gray-400 hover:text-red-400 transition"
                             title="Delete Message"
                           >
                             <IconTrash className="w-3.5 h-3.5" />
@@ -1252,83 +1523,99 @@ export default function Home() {
 
             {/* Chat Bottom Input Bar */}
             <div className="relative p-3 md:p-4 bg-[#0e1322]/90 border-t border-white/[0.08] backdrop-blur-xl">
-              {/* Emoji Picker Popover */}
-              {showEmojiPicker && (
-                <EmojiPicker
-                  onSelectEmoji={(emoji) => {
-                    setMessageText((prev) => prev + emoji);
-                    setShowEmojiPicker(false);
-                  }}
-                  onClose={() => setShowEmojiPicker(false)}
-                />
-              )}
-
-              {/* Voice Recorder Mode */}
-              {isRecordingVoice ? (
-                <VoiceRecorder
-                  onRecordingComplete={handleVoiceRecordingComplete}
-                  onCancel={() => setIsRecordingVoice(false)}
-                />
-              ) : (
-                <div className="flex items-center gap-2">
-                  {/* Emoji toggle */}
+              {/* If user is blocked */}
+              {isContactBlockedByMe ? (
+                <div className="flex items-center justify-center gap-3 py-2 text-xs text-gray-400">
+                  <IconBan className="w-4 h-4 text-red-400" />
+                  <span>You have blocked this contact.</span>
                   <button
-                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                    className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/[0.06] transition"
-                    title="Emojis"
+                    onClick={handleToggleBlockContact}
+                    className="text-violet-400 hover:text-violet-300 font-bold underline"
                   >
-                    <IconSmile className="w-5 h-5" />
+                    Unblock to chat
                   </button>
-
-                  {/* Attachment toggle (hidden file input) */}
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/[0.06] transition"
-                    title="Send Photo or Document"
-                  >
-                    <IconPaperclip className="w-5 h-5" />
-                  </button>
-
-                  {/* Text Input */}
-                  <input
-                    type="text"
-                    value={messageText}
-                    onChange={handleInputChange}
-                    onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendMessage()}
-                    placeholder={
-                      selectedChat.isAIChat
-                        ? "Ask Pulse AI anything..."
-                        : "Type your message..."
-                    }
-                    className="flex-1 bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500/60 focus:bg-white/[0.08] transition"
-                  />
-
-                  {/* Mic / Voice Recording Button */}
-                  {!messageText.trim() ? (
-                    <button
-                      onClick={() => setIsRecordingVoice(true)}
-                      className="p-3 rounded-xl bg-white/[0.05] hover:bg-white/10 text-gray-300 hover:text-white border border-white/[0.06] transition"
-                      title="Record Voice Note"
-                    >
-                      <IconMic className="w-5 h-5" />
-                    </button>
-                  ) : (
-                    /* Send Button */
-                    <button
-                      onClick={handleSendMessage}
-                      className="p-3 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 hover:opacity-95 text-white shadow-lg shadow-violet-600/30 transition transform hover:scale-105 active:scale-95"
-                      title="Send"
-                    >
-                      <IconSend className="w-5 h-5" />
-                    </button>
-                  )}
                 </div>
+              ) : (
+                <>
+                  {/* Emoji Picker Popover */}
+                  {showEmojiPicker && (
+                    <EmojiPicker
+                      onSelectEmoji={(emoji) => {
+                        setMessageText((prev) => prev + emoji);
+                        setShowEmojiPicker(false);
+                      }}
+                      onClose={() => setShowEmojiPicker(false)}
+                    />
+                  )}
+
+                  {/* Voice Recorder Mode */}
+                  {isRecordingVoice ? (
+                    <VoiceRecorder
+                      onRecordingComplete={handleVoiceRecordingComplete}
+                      onCancel={() => setIsRecordingVoice(false)}
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      {/* Emoji toggle */}
+                      <button
+                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                        className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/[0.06] transition"
+                        title="Emojis"
+                      >
+                        <IconSmile className="w-5 h-5" />
+                      </button>
+
+                      {/* Attachment toggle (hidden file input) */}
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/[0.06] transition"
+                        title="Send Photo or Document"
+                      >
+                        <IconPaperclip className="w-5 h-5" />
+                      </button>
+
+                      {/* Text Input */}
+                      <input
+                        type="text"
+                        value={messageText}
+                        onChange={handleInputChange}
+                        onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendMessage()}
+                        placeholder={
+                          selectedChat.isAIChat
+                            ? "Ask Pulse AI anything..."
+                            : "Type your message..."
+                        }
+                        className="flex-1 bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500/60 focus:bg-white/[0.08] transition"
+                      />
+
+                      {/* Mic / Voice Recording Button */}
+                      {!messageText.trim() ? (
+                        <button
+                          onClick={() => setIsRecordingVoice(true)}
+                          className="p-3 rounded-xl bg-white/[0.05] hover:bg-white/10 text-gray-300 hover:text-white border border-white/[0.06] transition"
+                          title="Record Voice Note"
+                        >
+                          <IconMic className="w-5 h-5" />
+                        </button>
+                      ) : (
+                        /* Send Button */
+                        <button
+                          onClick={handleSendMessage}
+                          className="p-3 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 hover:opacity-95 text-white shadow-lg shadow-violet-600/30 transition transform hover:scale-105 active:scale-95"
+                          title="Send"
+                        >
+                          <IconSend className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </>
@@ -1402,10 +1689,14 @@ export default function Home() {
           user={currentPartner}
           isOnline={isPartnerOnline}
           chatMessages={selectedChat?.messages || []}
+          isBlocked={isContactBlockedByMe}
           onClose={() => setShowProfileModal(false)}
           onStartAudioCall={() => startCall("audio")}
           onStartVideoCall={() => startCall("video")}
+          onToggleBlock={handleToggleBlockContact}
+          onClearChat={handleClearChatHistory}
           onDeleteChat={handleDeleteChat}
+          onPreviewImage={(url) => setPreviewImage(url)}
         />
       )}
 

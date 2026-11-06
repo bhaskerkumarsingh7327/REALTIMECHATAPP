@@ -10,7 +10,7 @@ export const getMyChats = async (req, res) => {
     }
 
     const chats = await Chat.find({ members: userId })
-      .populate("members", "username name avatar about isOnline lastSeen")
+      .populate("members", "username name avatar about isOnline lastSeen blockedUsers")
       .sort({ updatedAt: -1 });
 
     res.status(200).json(chats || []);
@@ -28,14 +28,14 @@ export const createOrGetChat = async (req, res) => {
       return res.status(400).json({ error: "Both myId and recipientId are required" });
     }
 
-    if (myId === recipientId) {
+    if (String(myId) === String(recipientId)) {
       return res.status(400).json({ error: "Cannot create chat with yourself" });
     }
 
     // Check if chat already exists
     let chat = await Chat.findOne({
       members: { $all: [myId, recipientId] },
-    }).populate("members", "username name avatar about isOnline lastSeen");
+    }).populate("members", "username name avatar about isOnline lastSeen blockedUsers");
 
     if (!chat) {
       chat = new Chat({
@@ -45,7 +45,7 @@ export const createOrGetChat = async (req, res) => {
       await chat.save();
       chat = await Chat.findById(chat._id).populate(
         "members",
-        "username name avatar about isOnline lastSeen"
+        "username name avatar about isOnline lastSeen blockedUsers"
       );
     }
 
@@ -58,10 +58,18 @@ export const createOrGetChat = async (req, res) => {
 // 3. SEND MESSAGE
 export const sendMessage = async (req, res) => {
   try {
-    const { chatId, sender, senderId, text, mediaUrl, mediaType, fileName, fileSize, system } = req.body;
+    const { chatId, sender, senderId, recipientId, text, mediaUrl, mediaType, fileName, fileSize, system } = req.body;
 
     if (!chatId || !sender) {
       return res.status(400).json({ error: "chatId and sender are required" });
+    }
+
+    // Block check: Verify recipient hasn't blocked sender
+    if (recipientId && senderId && !system) {
+      const recipient = await User.findById(recipientId);
+      if (recipient?.blockedUsers?.some((id) => String(id) === String(senderId))) {
+        return res.status(403).json({ error: "Message cannot be delivered. You are blocked by this user." });
+      }
     }
 
     const newMessage = {
@@ -73,11 +81,15 @@ export const sendMessage = async (req, res) => {
       fileName: fileName || "",
       fileSize: fileSize || "",
       system: !!system,
+      seen: false,
+      seenAt: null,
       createdAt: new Date(),
       reactions: [],
     };
 
-    const previewText = system ? text : (text || (mediaType === "audio" ? "🎵 Voice message" : (mediaType === "image" ? "📷 Photo" : "📎 File")));
+    const previewText = system
+      ? text
+      : text || (mediaType === "audio" ? "🎵 Voice message" : mediaType === "image" ? "📷 Photo" : "📎 File");
 
     const updatedChat = await Chat.findByIdAndUpdate(
       chatId,
@@ -96,7 +108,6 @@ export const sendMessage = async (req, res) => {
       return res.status(404).json({ error: "Chat not found" });
     }
 
-    // Return the newly created message item with its _id
     const savedMsg = updatedChat.messages[updatedChat.messages.length - 1];
     res.status(201).json(savedMsg);
   } catch (err) {
@@ -104,7 +115,60 @@ export const sendMessage = async (req, res) => {
   }
 };
 
-// 4. ADD / TOGGLE REACTION
+// 4. MARK CHAT AS SEEN (Read Receipts)
+export const markChatAsSeen = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { userId } = req.body;
+
+    if (!chatId || !userId) {
+      return res.status(400).json({ error: "chatId and userId are required" });
+    }
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    const now = new Date();
+    let modified = false;
+
+    chat.messages.forEach((msg) => {
+      // Mark as seen if message was sent by other party and is not yet seen
+      if (msg.senderId && String(msg.senderId) !== String(userId) && !msg.seen) {
+        msg.seen = true;
+        msg.seenAt = now;
+        modified = true;
+      }
+    });
+
+    if (modified) {
+      await chat.save();
+    }
+
+    res.status(200).json({ success: true, seenAt: now, modified });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// 5. CLEAR CHAT HISTORY
+export const clearChatHistory = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const chat = await Chat.findById(chatId);
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    chat.messages = [];
+    chat.lastMessage = "Chat cleared";
+    chat.lastMessageAt = new Date();
+    await chat.save();
+
+    res.status(200).json({ success: true, message: "Chat history cleared" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// 6. ADD / TOGGLE REACTION
 export const addReaction = async (req, res) => {
   try {
     const { chatId, messageId, emoji, username, userId } = req.body;
@@ -118,16 +182,13 @@ export const addReaction = async (req, res) => {
     const message = chat.messages.id(messageId);
     if (!message) return res.status(404).json({ error: "Message not found" });
 
-    // Check if user already reacted with this emoji
     const existingIndex = message.reactions.findIndex(
       (r) => r.username === username && r.emoji === emoji
     );
 
     if (existingIndex > -1) {
-      // Remove reaction (toggle)
       message.reactions.splice(existingIndex, 1);
     } else {
-      // Remove any prior reaction by same user or allow multiple
       message.reactions = message.reactions.filter((r) => r.username !== username);
       message.reactions.push({ emoji, username, userId });
     }
@@ -139,7 +200,7 @@ export const addReaction = async (req, res) => {
   }
 };
 
-// 5. DELETE A MESSAGE
+// 7. DELETE A MESSAGE
 export const deleteMessage = async (req, res) => {
   try {
     const { chatId, messageId } = req.params;
@@ -155,7 +216,7 @@ export const deleteMessage = async (req, res) => {
   }
 };
 
-// 6. DELETE CHAT
+// 8. DELETE CHAT
 export const deleteChat = async (req, res) => {
   try {
     const { chatId } = req.params;
@@ -171,7 +232,7 @@ export const deleteChat = async (req, res) => {
   }
 };
 
-// 7. SEARCH USERS
+// 9. SEARCH USERS
 export const searchUsers = async (req, res) => {
   try {
     const { query, myId } = req.query;
@@ -188,7 +249,7 @@ export const searchUsers = async (req, res) => {
         { email: { $regex: trimmed, $options: "i" } },
       ],
     })
-      .select("username name avatar about isOnline _id")
+      .select("username name avatar about isOnline lastSeen blockedUsers _id")
       .limit(15);
 
     res.status(200).json(users);

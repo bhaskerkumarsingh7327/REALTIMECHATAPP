@@ -19,6 +19,8 @@ const messageSchema = new mongoose.Schema({
   fileSize: { type: String, default: "" },
   reactions: [reactionSchema],
   system: { type: Boolean, default: false },
+  seen: { type: Boolean, default: false },
+  seenAt: { type: Date },
   createdAt: { type: Date, default: Date.now },
 });
 

@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema(
     about: { type: String, default: "Hey there! I am using PulseChat." },
     isOnline: { type: Boolean, default: false },
     lastSeen: { type: Date, default: Date.now },
+    blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   },
   { timestamps: true }
 );

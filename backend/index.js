@@ -185,6 +185,55 @@ io.on("connection", (socket) => {
     }
   });
 
+  // 7.1 Mark Messages as Seen / Read Receipts
+  socket.on("mark-as-seen", async ({ roomId, userId, senderId }) => {
+    try {
+      const now = new Date();
+      if (roomId && !roomId.startsWith("pulse_ai")) {
+        const chat = await Chat.findById(roomId);
+        if (chat) {
+          let modified = false;
+          chat.messages.forEach((msg) => {
+            if (msg.senderId && String(msg.senderId) !== String(userId) && !msg.seen) {
+              msg.seen = true;
+              msg.seenAt = now;
+              modified = true;
+            }
+          });
+          if (modified) await chat.save();
+        }
+      }
+      io.in(String(roomId)).emit("messages-seen-updated", {
+        roomId: String(roomId),
+        userId: String(userId),
+        seenAt: now,
+      });
+      if (senderId) {
+        io.to(String(senderId)).emit("messages-seen-updated", {
+          roomId: String(roomId),
+          userId: String(userId),
+          seenAt: now,
+        });
+      }
+    } catch (e) {
+      console.error("Error in mark-as-seen socket handler:", e);
+    }
+  });
+
+  // 7.2 Clear Chat History
+  socket.on("clear-chat", ({ roomId }) => {
+    if (roomId) {
+      io.in(String(roomId)).emit("chat-cleared", { roomId });
+    }
+  });
+
+  // 7.3 Block / Unblock Contact Alert
+  socket.on("user-blocked-status", ({ blockerId, targetId, isBlocked }) => {
+    if (targetId) {
+      io.to(String(targetId)).emit("blocked-status-changed", { blockerId, isBlocked });
+    }
+  });
+
   // ==========================================
   // 8. WEBRTC AUDIO & VIDEO CALL SIGNALING
   // ==========================================
