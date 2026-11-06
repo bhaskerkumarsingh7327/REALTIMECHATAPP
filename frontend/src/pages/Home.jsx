@@ -7,6 +7,7 @@ import axios from "axios";
 import { serverUrl } from "../main";
 import Logo from "../components/Logo";
 import CallModal from "../components/CallModal";
+import UserProfileModal from "../components/UserProfileModal";
 import VoiceRecorder from "../components/VoiceRecorder";
 import EmojiPicker from "../components/EmojiPicker";
 import AudioMessage from "../components/AudioMessage";
@@ -22,12 +23,13 @@ import {
   IconTrash,
   IconUser,
   IconLogOut,
-  IconCheck,
   IconCheckDouble,
   IconVolume2,
   IconVolumeX,
   IconClose,
   IconSparkles,
+  IconInfo,
+  IconMaximize,
 } from "../components/Icons";
 import { sounds } from "../utils/soundEffects";
 import { PULSE_AI_USER, generateAIResponse } from "../utils/aiBot";
@@ -47,6 +49,7 @@ export default function Home() {
 
   // Modals & UI states
   const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [searchFilter, setSearchFilter] = useState("");
   const [userSearchResults, setUserSearchResults] = useState([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
@@ -61,6 +64,8 @@ export default function Home() {
   const [callType, setCallType] = useState("video"); // 'audio' | 'video'
   const [callerInfo, setCallerInfo] = useState(null);
   const [incomingOffer, setIncomingOffer] = useState(null);
+  const [isCallMinimized, setIsCallMinimized] = useState(false);
+  const [callDuration, setCallDuration] = useState(0);
 
   // Refs
   const socketRef = useRef(null);
@@ -84,6 +89,13 @@ export default function Home() {
     sounds.setMuted(next);
   };
 
+  // Format call duration helper MM:SS
+  const formatCallDuration = (secs) => {
+    const mins = Math.floor(secs / 60);
+    const rem = secs % 60;
+    return `${mins.toString().padStart(2, "0")}:${rem.toString().padStart(2, "0")}`;
+  };
+
   // 1. Initialize Socket Connection & Listeners
   useEffect(() => {
     if (!userData?._id) return;
@@ -95,7 +107,6 @@ export default function Home() {
     });
     socketRef.current = socket;
 
-    // Attach user metadata to socket instance for easy access in modals
     socket.userId = userData._id;
     socket.userName = userData.name || userData.username;
     socket.userUsername = userData.username;
@@ -108,7 +119,7 @@ export default function Home() {
     };
 
     socket.on("connect", () => {
-      console.log("[SOCKET] Connected to PulseChat Realtime Gateway 🚀 Socket ID:", socket.id);
+      console.log("[SOCKET] Connected to PulseChat Gateway 🚀 Socket ID:", socket.id);
       registerUserSocket();
     });
 
@@ -142,7 +153,6 @@ export default function Home() {
       setChats((prev) => {
         const exists = prev.some((c) => String(c._id) === String(chatId));
         if (!exists) {
-          // If this is a new incoming chat, reload chats from server
           fetchChats();
           return prev;
         }
@@ -177,7 +187,7 @@ export default function Home() {
 
     // Realtime New Chat Alert
     socket.on("new-chat-received", (newChat) => {
-      console.log("[SOCKET] New chat received from contact:", newChat);
+      console.log("[SOCKET] New chat received:", newChat);
       if (newChat && newChat._id) {
         setChats((prev) => [newChat, ...prev.filter((c) => String(c._id) !== String(newChat._id))]);
         socket.emit("join-room", newChat._id);
@@ -234,10 +244,11 @@ export default function Home() {
 
     // Incoming WebRTC Call
     socket.on("incoming-call", ({ from, offer, callType: cType }) => {
-      console.log("[SOCKET] Incoming call alert from:", from, "Type:", cType);
+      console.log("[SOCKET] Incoming call from:", from, "Type:", cType);
       setCallerInfo(from);
       setIncomingOffer(offer);
       setCallType(cType || "video");
+      setIsCallMinimized(false);
       setCallState("incoming");
     });
 
@@ -254,7 +265,6 @@ export default function Home() {
       const res = await axios.get(`${serverUrl}/api/chat?userId=${userData._id}`);
       const fetched = Array.isArray(res.data) ? res.data : [];
 
-      // Include pinned Pulse AI companion in chats list
       const aiChat = {
         _id: "pulse_ai_chat_special",
         isAIChat: true,
@@ -263,7 +273,7 @@ export default function Home() {
           {
             _id: "ai_intro_1",
             sender: "Pulse AI",
-            text: "Welcome to PulseChat! 🚀 I'm Pulse AI, your neural companion. Ask me anything or explore features like HD Voice/Video calling, voice notes, and instant reactions!",
+            text: "Welcome to PulseChat! 🚀 I'm Pulse AI, your intelligent neural companion. You can chat with me, or make high-definition voice and video calls with friends!",
             createdAt: new Date(),
           },
         ],
@@ -274,7 +284,6 @@ export default function Home() {
       const combined = [aiChat, ...fetched];
       setChats(combined);
 
-      // Join socket rooms for each chat
       if (socketRef.current) {
         fetched.forEach((c) => socketRef.current.emit("join-room", c._id));
       }
@@ -291,6 +300,25 @@ export default function Home() {
     setRemoteTypingUser(null);
   }, [selectedChat?._id]);
 
+  // Helper to extract the other user in a 1-to-1 chat
+  const getChatPartner = (chat) => {
+    if (!chat) return null;
+    if (chat.isAIChat) return PULSE_AI_USER;
+    const currentId = String(userData?._id || userData?.id || "");
+    const partner = chat.members?.find((m) => {
+      const memberId = String(m?._id || m || "");
+      return memberId && memberId !== currentId;
+    });
+    return partner || { username: "User", name: "User" };
+  };
+
+  const currentPartner = selectedChat ? getChatPartner(selectedChat) : null;
+  const isPartnerOnline = currentPartner
+    ? currentPartner._id === PULSE_AI_USER._id
+      ? true
+      : onlineUsers.has(String(currentPartner._id))
+    : false;
+
   // 2. Sending Messages
   const handleSendMessage = async () => {
     const text = messageText.trim();
@@ -299,7 +327,7 @@ export default function Home() {
     setMessageText("");
     stopTyping();
 
-    // Handle Pulse AI Assistant Chat
+    // Pulse AI Assistant Chat
     if (selectedChat.isAIChat) {
       const userMsg = {
         _id: "user_msg_" + Date.now(),
@@ -315,7 +343,6 @@ export default function Home() {
       );
       sounds.playMessageSent();
 
-      // Show typing for AI
       setRemoteTypingUser("Pulse AI");
       const aiReplyText = await generateAIResponse(text);
       setRemoteTypingUser(null);
@@ -387,7 +414,6 @@ export default function Home() {
     try {
       const uploadRes = await axios.post(`${serverUrl}/api/media/upload`, formData);
       const { url, fileName, fileSize, mediaType } = uploadRes.data;
-
       const fullUrl = url.startsWith("http") ? url : `${serverUrl}${url}`;
 
       const msgPayload = {
@@ -598,27 +624,24 @@ export default function Home() {
 
     setCallType(type);
     setCallerInfo(null);
+    setIsCallMinimized(false);
     setCallState("outgoing");
   };
 
-  // WhatsApp-style Call Status Handler
+  // WhatsApp-style Call Status Notification Generator
   const handleCallEnded = async (callData = {}) => {
     const duration = typeof callData === "object" ? (callData.duration || 0) : 0;
     const cType = (typeof callData === "object" && callData.callType) ? callData.callType : callType;
     const status = (typeof callData === "object" && callData.status) ? callData.status : "completed";
-    const reason = typeof callData === "string" ? callData : null;
 
     setCallState("idle");
     setCallerInfo(null);
     setIncomingOffer(null);
-
-    if (reason && duration === 0) {
-      console.log("[CALL END REASON]", reason);
-    }
+    setIsCallMinimized(false);
+    setCallDuration(0);
 
     if (!selectedChat || selectedChat.isAIChat) return;
 
-    // Generate WhatsApp-style call summary notification
     const icon = cType === "video" ? "📹" : "📞";
     const typeLabel = cType === "video" ? "Video call" : "Voice call";
     let summaryText = "";
@@ -720,18 +743,6 @@ export default function Home() {
     }
   };
 
-  // Helper to extract the other user in a 1-to-1 chat
-  const getChatPartner = (chat) => {
-    if (!chat) return null;
-    if (chat.isAIChat) return PULSE_AI_USER;
-    const currentId = String(userData?._id || userData?.id || "");
-    const partner = chat.members?.find((m) => {
-      const memberId = String(m?._id || m || "");
-      return memberId && memberId !== currentId;
-    });
-    return partner || { username: "User", name: "User" };
-  };
-
   const getMediaUrl = (url) => {
     if (!url) return "";
     if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:") || url.startsWith("blob:")) {
@@ -740,59 +751,55 @@ export default function Home() {
     return `${serverUrl}${url.startsWith("/") ? "" : "/"}${url}`;
   };
 
-  const currentPartner = selectedChat ? getChatPartner(selectedChat) : null;
-  const isPartnerOnline = currentPartner
-    ? currentPartner._id === PULSE_AI_USER._id
-      ? true
-      : onlineUsers.has(String(currentPartner._id))
-    : false;
-
   return (
-    <div className="fixed inset-0 flex h-[100dvh] w-full bg-[#0a0d14] text-white overflow-hidden font-sans select-none">
-      {/* Background ambient lighting */}
-      <div className="absolute top-0 -left-40 w-96 h-96 bg-violet-600/10 rounded-full blur-[140px] pointer-events-none"></div>
-      <div className="absolute bottom-0 -right-40 w-96 h-96 bg-cyan-600/10 rounded-full blur-[140px] pointer-events-none"></div>
+    <div className="fixed inset-0 flex h-[100dvh] w-full bg-[#070a12] text-white overflow-hidden font-sans select-none">
+      {/* Dynamic Ambient Background Glows */}
+      <div className="absolute top-0 -left-48 w-[500px] h-[500px] bg-violet-600/15 rounded-full blur-[160px] pointer-events-none"></div>
+      <div className="absolute bottom-0 -right-48 w-[500px] h-[500px] bg-cyan-600/15 rounded-full blur-[160px] pointer-events-none"></div>
+      <div className="absolute top-1/2 left-1/3 w-[300px] h-[300px] bg-fuchsia-600/10 rounded-full blur-[140px] pointer-events-none"></div>
 
       {/* ======================================================== */}
       {/* LEFT SIDEBAR: Brand, User Profile, Chat List */}
       {/* ======================================================== */}
       <div
-        className={`w-full md:w-96 border-r border-white/10 flex flex-col bg-[#10141f]/70 backdrop-blur-xl ${
+        className={`w-full md:w-[380px] lg:w-[420px] border-r border-white/[0.08] flex flex-col bg-[#0d111d]/90 backdrop-blur-2xl ${
           selectedChat ? "hidden md:flex" : "flex"
-        } h-full z-10 transition-all`}
+        } h-full z-10 transition-all shadow-[10px_0_30px_rgba(0,0,0,0.4)]`}
       >
-        {/* Header: Logo & User Actions */}
-        <div className="p-4 border-b border-white/10 flex items-center justify-between flex-shrink-0">
+        {/* Header: Logo & User Quick Actions */}
+        <div className="p-4 border-b border-white/[0.08] flex items-center justify-between flex-shrink-0">
           <Logo size="md" />
 
           <div className="flex items-center gap-1.5">
-            {/* Sound mute toggle */}
+            {/* Sound toggle */}
             <button
               onClick={toggleSoundMute}
-              className={`p-2 rounded-xl transition ${
-                isMutedSounds ? "bg-red-500/20 text-red-400" : "bg-white/5 text-gray-400 hover:text-white"
+              className={`p-2.5 rounded-xl transition ${
+                isMutedSounds
+                  ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                  : "bg-white/[0.04] text-gray-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]"
               }`}
               title={isMutedSounds ? "Unmute sounds" : "Mute sounds"}
             >
-              {isMutedSounds ? <IconVolumeX className="w-5 h-5" /> : <IconVolume2 className="w-5 h-5" />}
+              {isMutedSounds ? <IconVolumeX className="w-4 h-4" /> : <IconVolume2 className="w-4 h-4" />}
             </button>
 
-            {/* Profile */}
+            {/* Profile Settings */}
             <Link
               to="/profile"
-              className="p-2 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-xl transition"
+              className="p-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-gray-300 hover:text-white rounded-xl transition"
               title="Profile Settings"
             >
-              <IconUser className="w-5 h-5" />
+              <IconUser className="w-4 h-4" />
             </Link>
 
             {/* New Chat Button */}
             <button
               onClick={() => setShowNewChatModal(true)}
-              className="p-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white rounded-xl transition shadow-lg shadow-violet-600/20"
-              title="New Conversation"
+              className="p-2.5 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 hover:opacity-95 text-white rounded-xl transition shadow-lg shadow-violet-600/30 transform hover:scale-105 active:scale-95"
+              title="Start New Conversation"
             >
-              <IconPlus className="w-5 h-5" />
+              <IconPlus className="w-4 h-4 stroke-[2.5]" />
             </button>
 
             {/* Logout */}
@@ -801,46 +808,64 @@ export default function Home() {
                 dispatch(clearUserData());
                 navigate("/login");
               }}
-              className="p-2 text-gray-500 hover:text-red-400 rounded-xl hover:bg-red-500/10 transition"
+              className="p-2.5 text-gray-500 hover:text-red-400 rounded-xl hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition"
               title="Logout"
             >
-              <IconLogOut className="w-5 h-5" />
+              <IconLogOut className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Current User Quick Info Card */}
-        <div className="px-4 py-3 mx-3 my-2 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center gap-3">
-          <div className="relative">
-            <img
-              src={userData?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${userData?.username || "me"}`}
-              alt={userData?.username}
-              className="w-10 h-10 rounded-full object-cover ring-2 ring-violet-500/40"
-            />
-            <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#10141f] rounded-full"></span>
+        <div className="px-4 py-3 mx-3.5 my-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="relative flex-shrink-0">
+              <img
+                src={userData?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${userData?.username || "me"}`}
+                alt={userData?.username}
+                className="w-10 h-10 rounded-full object-cover ring-2 ring-violet-500/50"
+              />
+              <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#0d111d] rounded-full shadow-sm"></span>
+            </div>
+            <div className="min-w-0">
+              <h4 className="font-bold text-sm text-white truncate leading-tight">
+                {userData?.name || userData?.username}
+              </h4>
+              <p className="text-[11px] text-emerald-400 font-medium truncate flex items-center gap-1">
+                <span>● Online</span>
+                <span className="text-gray-500">•</span>
+                <span className="text-gray-400 truncate">@{userData?.username}</span>
+              </p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <h4 className="font-bold text-sm text-white truncate">{userData?.name || userData?.username}</h4>
-            <p className="text-[11px] text-gray-400 truncate">@{userData?.username} • Active now</p>
-          </div>
+
+          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            Encrypted
+          </span>
         </div>
 
         {/* Search Input Filter */}
-        <div className="px-3 py-2">
+        <div className="px-3.5 py-1.5">
           <div className="relative">
-            <IconSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <IconSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search conversations..."
+              placeholder="Search chats, contacts, messages..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/5 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-violet-500/50 transition"
+              className="w-full pl-10 pr-4 py-2.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-violet-500/60 focus:bg-white/[0.07] transition"
             />
           </div>
         </div>
 
+        {/* Chats List Header */}
+        <div className="px-4 pt-3 pb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-gray-400">
+          <span>Conversations</span>
+          <span className="text-violet-400 font-mono font-semibold">{chats.length}</span>
+        </div>
+
         {/* Chats List */}
-        <div className="flex-1 overflow-y-auto px-2 py-1 space-y-1">
+        <div className="flex-1 overflow-y-auto px-2.5 py-1 space-y-1">
           {chats
             .filter((c) => {
               if (!searchFilter.trim()) return true;
@@ -855,16 +880,16 @@ export default function Home() {
             .map((chat) => {
               const partner = getChatPartner(chat);
               const isSelected = selectedChat?._id === chat._id;
-              const isOnline = chat.isAIChat ? true : onlineUsers.has(partner._id);
+              const isOnline = chat.isAIChat ? true : onlineUsers.has(String(partner._id));
 
               return (
                 <div
                   key={chat._id}
                   onClick={() => setSelectedChat(chat)}
-                  className={`group relative p-3 rounded-2xl cursor-pointer transition-all flex items-center gap-3.5 ${
+                  className={`group relative p-3 rounded-2xl cursor-pointer transition-all flex items-center gap-3.5 border ${
                     isSelected
-                      ? "bg-gradient-to-r from-violet-600/90 to-fuchsia-600/80 shadow-lg shadow-violet-600/20 text-white"
-                      : "hover:bg-white/5 text-gray-200"
+                      ? "bg-gradient-to-r from-violet-600/90 via-violet-700/90 to-indigo-700/90 text-white shadow-[0_6px_20px_rgba(124,58,237,0.3)] border-violet-400/30"
+                      : "hover:bg-white/[0.04] text-gray-200 border-transparent hover:border-white/[0.06]"
                   }`}
                 >
                   {/* Avatar with Status Ring */}
@@ -875,10 +900,10 @@ export default function Home() {
                         `https://api.dicebear.com/7.x/bottts/svg?seed=${partner.username || "user"}`
                       }
                       alt={partner.username}
-                      className="w-12 h-12 rounded-full object-cover border border-white/10"
+                      className="w-12 h-12 rounded-full object-cover border border-white/10 group-hover:scale-105 transition"
                     />
                     {isOnline && (
-                      <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#10141f] rounded-full shadow-sm"></span>
+                      <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#0d111d] rounded-full shadow-sm"></span>
                     )}
                   </div>
 
@@ -905,7 +930,7 @@ export default function Home() {
                       </span>
                     </div>
 
-                    <p className={`text-xs truncate ${isSelected ? "text-violet-100" : "text-gray-400"}`}>
+                    <p className={`text-xs truncate ${isSelected ? "text-violet-100 font-medium" : "text-gray-400"}`}>
                       {chat.lastMessage || "No messages yet"}
                     </p>
                   </div>
@@ -919,41 +944,58 @@ export default function Home() {
       {/* RIGHT MAIN AREA: Chat Conversation Screen */}
       {/* ======================================================== */}
       <div
-        className={`flex-1 flex flex-col bg-[#0b0e15] h-full ${
+        className={`flex-1 flex flex-col bg-[#070a12] h-full ${
           !selectedChat ? "hidden md:flex" : "flex"
-        } relative`}
+        } relative overflow-hidden`}
       >
         {selectedChat ? (
           <>
             {/* Chat Top Header Bar */}
-            <div className="p-3.5 md:p-4 bg-[#111622]/80 border-b border-white/10 backdrop-blur-md flex items-center justify-between z-20">
-              <div className="flex items-center gap-3">
-                {/* Back button for mobile */}
+            <div className="p-3.5 md:p-4 bg-[#0e1322]/90 border-b border-white/[0.08] backdrop-blur-xl flex items-center justify-between z-20 shadow-md">
+              {/* Partner Info (Click to open profile modal) */}
+              <div
+                onClick={() => {
+                  if (!selectedChat.isAIChat) setShowProfileModal(true);
+                }}
+                className={`flex items-center gap-3.5 min-w-0 ${
+                  !selectedChat.isAIChat ? "cursor-pointer group" : ""
+                }`}
+                title={!selectedChat.isAIChat ? "Click to view profile & media" : "Pulse AI Assistant"}
+              >
+                {/* Mobile back arrow */}
                 <button
-                  onClick={() => setSelectedChat(null)}
-                  className="md:hidden p-2 text-gray-400 hover:text-white rounded-xl hover:bg-white/5 transition"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedChat(null);
+                  }}
+                  className="md:hidden p-2 text-gray-400 hover:text-white rounded-xl hover:bg-white/10 transition -ml-1"
                 >
                   ←
                 </button>
 
-                <div className="relative">
+                <div className="relative flex-shrink-0">
                   <img
                     src={
                       currentPartner?.avatar ||
                       `https://api.dicebear.com/7.x/bottts/svg?seed=${currentPartner?.username || "user"}`
                     }
                     alt={currentPartner?.username}
-                    className="w-11 h-11 rounded-full object-cover border border-white/10"
+                    className="w-11 h-11 rounded-full object-cover border-2 border-violet-500/30 group-hover:border-violet-400 transition"
                   />
                   {isPartnerOnline && (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#111622] rounded-full"></span>
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#0e1322] rounded-full"></span>
                   )}
                 </div>
 
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-sm md:text-base text-white truncate">
-                      {currentPartner?.name || currentPartner?.username}
+                    <h3 className="font-bold text-sm md:text-base text-white truncate group-hover:text-violet-300 transition flex items-center gap-1.5">
+                      <span>{currentPartner?.name || currentPartner?.username}</span>
+                      {!selectedChat.isAIChat && (
+                        <span className="text-[10px] text-gray-500 group-hover:text-violet-400 transition">
+                          ↗
+                        </span>
+                      )}
                     </h3>
                     {selectedChat.isAIChat && (
                       <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full font-bold border border-cyan-500/30">
@@ -963,49 +1005,88 @@ export default function Home() {
                   </div>
                   <p className="text-[11px] text-gray-400 truncate">
                     {remoteTypingUser ? (
-                      <span className="text-violet-400 font-medium animate-pulse">
+                      <span className="text-violet-400 font-semibold animate-pulse">
                         ✍️ {remoteTypingUser} is typing...
                       </span>
                     ) : isPartnerOnline ? (
-                      <span className="text-emerald-400 font-medium">● Online</span>
+                      <span className="text-emerald-400 font-medium flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Active Now • Tap for profile
+                      </span>
                     ) : (
-                      "Offline"
+                      "Offline • Tap for profile"
                     )}
                   </p>
                 </div>
               </div>
 
-              {/* Calling and Action Buttons */}
+              {/* Header Action Buttons */}
               <div className="flex items-center gap-2">
                 {!selectedChat.isAIChat && (
                   <>
                     <button
                       onClick={() => startCall("audio")}
-                      className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition shadow-sm"
-                      title="Audio Call"
+                      className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition shadow-sm hover:scale-105 active:scale-95"
+                      title="Start Voice Call"
                     >
-                      <IconPhone className="w-5 h-5" />
+                      <IconPhone className="w-4 h-4" />
                     </button>
 
                     <button
                       onClick={() => startCall("video")}
-                      className="p-2.5 rounded-xl bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition shadow-sm"
-                      title="Video Call"
+                      className="p-2.5 rounded-xl bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition shadow-sm hover:scale-105 active:scale-95"
+                      title="Start Video Call"
                     >
-                      <IconVideo className="w-5 h-5" />
+                      <IconVideo className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={() => setShowProfileModal(true)}
+                      className="p-2.5 rounded-xl bg-white/[0.05] text-gray-300 hover:text-white hover:bg-white/10 border border-white/[0.08] transition shadow-sm"
+                      title="Contact Profile & Info"
+                    >
+                      <IconInfo className="w-4 h-4" />
                     </button>
 
                     <button
                       onClick={handleDeleteChat}
-                      className="p-2.5 rounded-xl bg-white/5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition"
+                      className="p-2.5 rounded-xl bg-white/[0.04] text-gray-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition"
                       title="Delete Conversation"
                     >
-                      <IconTrash className="w-5 h-5" />
+                      <IconTrash className="w-4 h-4" />
                     </button>
                   </>
                 )}
               </div>
             </div>
+
+            {/* LIVE ACTIVE CALL BANNER (Appears when call is minimized or ongoing) */}
+            {(callState === "in-call" || callState === "outgoing") && (
+              <div
+                onClick={() => setIsCallMinimized(false)}
+                className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 px-4 py-2.5 flex items-center justify-between cursor-pointer hover:brightness-110 transition shadow-lg text-white select-none z-20"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-85"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                  </span>
+                  <span className="text-xs font-bold tracking-wide">
+                    {callState === "in-call" ? `CALL WITH ${currentPartner?.name || currentPartner?.username}` : "CALLING..."}
+                  </span>
+                  <span className="text-xs text-white font-mono font-bold">
+                    ({formatCallDuration(callDuration)})
+                  </span>
+                  <span className="text-[11px] text-white/90 hidden sm:inline">
+                    • Tap anywhere to return to calling screen ↗
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs font-semibold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition shadow-sm">
+                  <span>Return to Call</span>
+                  <IconMaximize className="w-3.5 h-3.5" />
+                </div>
+              </div>
+            )}
 
             {/* Messages Scroll Area */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
@@ -1013,12 +1094,20 @@ export default function Home() {
                 const isSender = msg.sender === userData.username;
                 const isSystem = msg.system || msg.mediaType === "system" || msg.sender === "System";
 
+                // WhatsApp-Style Call Notification Message
                 if (isSystem) {
                   return (
                     <div key={msg._id || idx} className="flex justify-center my-3 w-full">
-                      <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.06] border border-white/10 text-xs text-gray-300 font-medium shadow-sm backdrop-blur-sm">
+                      <div
+                        onClick={() => {
+                          if (callState === "in-call" || callState === "outgoing") {
+                            setIsCallMinimized(false);
+                          }
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.06] border border-white/10 text-xs text-gray-200 font-medium shadow-sm backdrop-blur-md hover:bg-white/[0.1] transition cursor-pointer select-none"
+                      >
                         <span>{msg.text}</span>
-                        <span className="text-[10px] text-gray-500 font-mono">
+                        <span className="text-[10px] text-gray-400 font-mono">
                           {msg.createdAt
                             ? new Date(msg.createdAt).toLocaleTimeString([], {
                                 hour: "2-digit",
@@ -1037,13 +1126,13 @@ export default function Home() {
                     className={`flex flex-col ${isSender ? "items-end" : "items-start"} group relative`}
                   >
                     <div
-                      className={`relative max-w-[85%] md:max-w-[70%] rounded-2xl p-3 px-4 shadow-md transition-all ${
+                      className={`relative max-w-[85%] md:max-w-[70%] rounded-2xl p-3.5 px-4 shadow-[0_4px_16px_rgba(0,0,0,0.25)] transition-all ${
                         isSender
-                          ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-br-sm"
-                          : "bg-[#161c28] border border-white/10 text-gray-200 rounded-bl-sm"
+                          ? "bg-gradient-to-br from-violet-600 via-violet-700 to-indigo-700 text-white rounded-br-xs shadow-violet-900/20"
+                          : "bg-[#121828]/95 border border-white/[0.08] text-gray-100 rounded-bl-xs backdrop-blur-md"
                       }`}
                     >
-                      {/* Sender label in group/AI mode */}
+                      {/* Sender label in received mode */}
                       {!isSender && (
                         <p className="text-[11px] font-bold text-violet-400 mb-1">
                           {msg.sender}
@@ -1052,12 +1141,12 @@ export default function Home() {
 
                       {/* Image Attachment */}
                       {msg.mediaType === "image" && msg.mediaUrl && (
-                        <div className="my-1 rounded-xl overflow-hidden cursor-pointer">
+                        <div className="my-1 rounded-xl overflow-hidden cursor-pointer border border-white/10">
                           <img
                             src={getMediaUrl(msg.mediaUrl)}
                             alt="Attached"
                             onClick={() => setPreviewImage(getMediaUrl(msg.mediaUrl))}
-                            className="max-h-72 w-full object-cover rounded-xl hover:opacity-95 transition"
+                            className="max-h-72 w-full object-cover rounded-xl hover:scale-[1.01] transition duration-200"
                           />
                         </div>
                       )}
@@ -1073,7 +1162,7 @@ export default function Home() {
                           href={getMediaUrl(msg.mediaUrl)}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex items-center gap-3 p-2 my-1 rounded-xl bg-black/20 hover:bg-black/30 transition text-xs"
+                          className="flex items-center gap-3 p-2.5 my-1 rounded-xl bg-black/30 hover:bg-black/40 border border-white/10 transition text-xs"
                         >
                           <IconPaperclip className="w-5 h-5 text-violet-300" />
                           <div className="flex-1 truncate">
@@ -1085,13 +1174,13 @@ export default function Home() {
 
                       {/* Text Content */}
                       {msg.text && msg.mediaType !== "audio" && (
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words select-text">
                           {msg.text}
                         </p>
                       )}
 
                       {/* Message Metadata (Time & Delivery Status) */}
-                      <div className="flex items-center justify-end gap-1.5 mt-1.5 text-[10px] opacity-75">
+                      <div className="flex items-center justify-end gap-1.5 mt-1 text-[10px] opacity-75">
                         <span>
                           {msg.createdAt
                             ? new Date(msg.createdAt).toLocaleTimeString([], {
@@ -1116,7 +1205,7 @@ export default function Home() {
                               <button
                                 key={rIdx}
                                 onClick={() => handleReaction(msg._id, emoji)}
-                                className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-black/30 border border-white/10 hover:bg-black/50 transition"
+                                className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-black/40 border border-white/10 hover:bg-black/60 transition"
                               >
                                 <span>{emoji}</span>
                                 <span className="font-mono text-[10px] font-bold">{count}</span>
@@ -1132,7 +1221,7 @@ export default function Home() {
                       <div
                         className={`absolute -top-7 ${
                           isSender ? "right-2" : "left-2"
-                        } hidden group-hover:flex items-center gap-1 bg-[#1c2230] border border-white/10 rounded-full px-2 py-1 shadow-xl z-20`}
+                        } hidden group-hover:flex items-center gap-1 bg-[#1a2133] border border-white/10 rounded-full px-2 py-1 shadow-2xl z-20`}
                       >
                         {["❤️", "👍", "😂", "🔥", "😮", "👏"].map((emoji) => (
                           <button
@@ -1147,7 +1236,7 @@ export default function Home() {
                           <button
                             onClick={() => handleDeleteMessage(msg._id)}
                             className="ml-1 text-gray-400 hover:text-red-400 transition"
-                            title="Delete"
+                            title="Delete Message"
                           >
                             <IconTrash className="w-3.5 h-3.5" />
                           </button>
@@ -1162,7 +1251,7 @@ export default function Home() {
             </div>
 
             {/* Chat Bottom Input Bar */}
-            <div className="relative p-3 md:p-4 bg-[#111622]/90 border-t border-white/10 backdrop-blur-md">
+            <div className="relative p-3 md:p-4 bg-[#0e1322]/90 border-t border-white/[0.08] backdrop-blur-xl">
               {/* Emoji Picker Popover */}
               {showEmojiPicker && (
                 <EmojiPicker
@@ -1185,7 +1274,7 @@ export default function Home() {
                   {/* Emoji toggle */}
                   <button
                     onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                    className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition"
+                    className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/[0.06] transition"
                     title="Emojis"
                   >
                     <IconSmile className="w-5 h-5" />
@@ -1200,7 +1289,7 @@ export default function Home() {
                   />
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition"
+                    className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/[0.06] transition"
                     title="Send Photo or Document"
                   >
                     <IconPaperclip className="w-5 h-5" />
@@ -1217,14 +1306,14 @@ export default function Home() {
                         ? "Ask Pulse AI anything..."
                         : "Type your message..."
                     }
-                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition"
+                    className="flex-1 bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500/60 focus:bg-white/[0.08] transition"
                   />
 
                   {/* Mic / Voice Recording Button */}
                   {!messageText.trim() ? (
                     <button
                       onClick={() => setIsRecordingVoice(true)}
-                      className="p-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition"
+                      className="p-3 rounded-xl bg-white/[0.05] hover:bg-white/10 text-gray-300 hover:text-white border border-white/[0.06] transition"
                       title="Record Voice Note"
                     >
                       <IconMic className="w-5 h-5" />
@@ -1233,7 +1322,7 @@ export default function Home() {
                     /* Send Button */
                     <button
                       onClick={handleSendMessage}
-                      className="p-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-lg shadow-violet-600/30 transition transform hover:scale-105 active:scale-95"
+                      className="p-3 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 hover:opacity-95 text-white shadow-lg shadow-violet-600/30 transition transform hover:scale-105 active:scale-95"
                       title="Send"
                     >
                       <IconSend className="w-5 h-5" />
@@ -1244,21 +1333,40 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* Empty Chat State */
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center z-10">
-            <Logo size="xl" showTag={false} className="mb-6 opacity-80" />
-            <h3 className="text-2xl font-bold text-white mb-2">
-              Select or Start a Conversation
+          /* Empty Chat State - Luxury Modern Welcome Graphic */
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center z-10">
+            <div className="relative mb-6">
+              <div className="absolute -inset-4 bg-gradient-to-r from-violet-600 to-cyan-500 rounded-full blur-2xl opacity-30 animate-pulse"></div>
+              <Logo size="xl" showTag={false} className="relative opacity-90" />
+            </div>
+
+            <h3 className="text-3xl font-extrabold text-white mb-3 tracking-tight">
+              Welcome to <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-fuchsia-400 to-cyan-400">PulseChat</span>
             </h3>
-            <p className="text-gray-400 text-sm max-w-sm mb-6">
-              Connect in real-time with colleagues & friends via HD voice, video, rich media, and neural AI assistance.
+
+            <p className="text-gray-400 text-sm max-w-md mb-8 leading-relaxed">
+              Experience modern realtime messaging with peer-to-peer HD video & voice calling, neural AI assistance, voice notes, and instant reactions.
             </p>
-            <button
-              onClick={() => setShowNewChatModal(true)}
-              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold text-sm shadow-xl shadow-violet-600/30 hover:scale-105 transition"
-            >
-              + Start New Chat
-            </button>
+
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => setShowNewChatModal(true)}
+                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-bold text-xs uppercase tracking-wider shadow-xl shadow-violet-600/30 hover:scale-105 active:scale-95 transition"
+              >
+                + New Conversation
+              </button>
+
+              <button
+                onClick={() => {
+                  const ai = chats.find((c) => c.isAIChat);
+                  if (ai) setSelectedChat(ai);
+                }}
+                className="px-6 py-3 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] text-gray-200 border border-white/10 font-bold text-xs uppercase tracking-wider hover:scale-105 active:scale-95 transition flex items-center gap-2"
+              >
+                <IconSparkles className="w-4 h-4 text-cyan-400" />
+                <span>Talk to Pulse AI</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1274,23 +1382,44 @@ export default function Home() {
         incomingOffer={incomingOffer}
         socket={socketRef.current}
         currentUser={userData}
-        onEndCall={handleCallEnded}
+        isMinimized={isCallMinimized}
+        onToggleMinimize={setIsCallMinimized}
+        onDurationUpdate={setCallDuration}
+        onEndCall={(callData) => {
+          setIsCallMinimized(false);
+          handleCallEnded(callData);
+        }}
         onCallAccepted={() => {
           setCallState("in-call");
         }}
       />
 
       {/* ======================================================== */}
-      {/* 4. NEW CHAT SEARCH MODAL */}
+      {/* 4. USER PROFILE MODAL */}
+      {/* ======================================================== */}
+      {showProfileModal && currentPartner && (
+        <UserProfileModal
+          user={currentPartner}
+          isOnline={isPartnerOnline}
+          chatMessages={selectedChat?.messages || []}
+          onClose={() => setShowProfileModal(false)}
+          onStartAudioCall={() => startCall("audio")}
+          onStartVideoCall={() => startCall("video")}
+          onDeleteChat={handleDeleteChat}
+        />
+      )}
+
+      {/* ======================================================== */}
+      {/* 5. NEW CHAT SEARCH MODAL */}
       {/* ======================================================== */}
       {showNewChatModal && (
         <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-[#131824] border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col max-h-[80vh]">
+          <div className="w-full max-w-md bg-[#111624] border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col max-h-[80vh]">
             <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-4">
               <h3 className="text-lg font-bold text-white">Start New Conversation</h3>
               <button
                 onClick={() => setShowNewChatModal(false)}
-                className="text-gray-400 hover:text-white p-1"
+                className="text-gray-400 hover:text-white p-1 rounded-xl hover:bg-white/10 transition"
               >
                 <IconClose className="w-5 h-5" />
               </button>
@@ -1329,7 +1458,7 @@ export default function Home() {
                       <h4 className="font-semibold text-sm text-white truncate">{user.name || user.username}</h4>
                       <p className="text-xs text-gray-400 truncate">@{user.username}</p>
                     </div>
-                    <span className="text-xs text-violet-400 font-semibold px-2 py-1 rounded-lg bg-violet-500/10">
+                    <span className="text-xs text-violet-400 font-semibold px-2.5 py-1 rounded-lg bg-violet-500/10 border border-violet-500/20">
                       Chat →
                     </span>
                   </div>
@@ -1347,23 +1476,23 @@ export default function Home() {
       )}
 
       {/* ======================================================== */}
-      {/* 5. IMAGE LIGHTBOX MODAL */}
+      {/* 6. IMAGE LIGHTBOX MODAL */}
       {/* ======================================================== */}
       {previewImage && (
         <div
           onClick={() => setPreviewImage(null)}
-          className="fixed inset-0 z-[250] bg-black/95 flex items-center justify-center p-4 cursor-pointer"
+          className="fixed inset-0 z-[260] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
         >
           <button
             onClick={() => setPreviewImage(null)}
-            className="absolute top-6 right-6 text-white p-2 rounded-full bg-white/10 hover:bg-white/20 transition"
+            className="absolute top-6 right-6 text-white p-2.5 rounded-full bg-white/10 hover:bg-white/20 transition"
           >
             <IconClose className="w-6 h-6" />
           </button>
           <img
             src={previewImage}
             alt="Preview"
-            className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl"
+            className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl border border-white/10"
           />
         </div>
       )}

@@ -8,6 +8,8 @@ import {
   IconCamera,
   IconCameraOff,
   IconScreenShare,
+  IconMinimize,
+  IconMaximize,
 } from "./Icons";
 import { sounds } from "../utils/soundEffects";
 
@@ -32,7 +34,21 @@ export default function CallModal({
   incomingOffer,
   onEndCall,
   onCallAccepted,
+  isMinimized: externalIsMinimized,
+  onToggleMinimize,
+  onDurationUpdate,
 }) {
+  const [internalIsMinimized, setInternalIsMinimized] = useState(false);
+  const isMinimized = externalIsMinimized !== undefined ? externalIsMinimized : internalIsMinimized;
+
+  const setMinimizedState = (val) => {
+    if (onToggleMinimize) {
+      onToggleMinimize(val);
+    } else {
+      setInternalIsMinimized(val);
+    }
+  };
+
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoDisabled, setIsVideoDisabled] = useState(callType === "audio");
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -40,6 +56,7 @@ export default function CallModal({
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const miniVideoRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
@@ -55,10 +72,18 @@ export default function CallModal({
     if (tid) targetIdRef.current = String(tid);
   }, [callerInfo, peerUser]);
 
+  // Reset minimize state on incoming or idle
+  useEffect(() => {
+    if (callState === "incoming" || callState === "idle") {
+      setMinimizedState(false);
+    }
+  }, [callState]);
+
   // Keep duration ref in sync for callbacks
   useEffect(() => {
     durationRef.current = duration;
-  }, [duration]);
+    if (onDurationUpdate) onDurationUpdate(duration);
+  }, [duration, onDurationUpdate]);
 
   // Callback ref helpers to ensure streams attach the moment video tags mount into the DOM
   const setLocalVideo = (el) => {
@@ -76,6 +101,43 @@ export default function CallModal({
       el.play().catch(() => {});
     }
   };
+
+  const setMiniVideo = (el) => {
+    miniVideoRef.current = el;
+    if (el) {
+      const stream = remoteStreamRef.current || localStreamRef.current;
+      if (stream) {
+        el.srcObject = stream;
+        el.play().catch(() => {});
+      }
+    }
+  };
+
+  // Re-attach video stream if minimize state changes
+  useEffect(() => {
+    if (!isMinimized && callState === "in-call") {
+      setTimeout(() => {
+        if (localVideoRef.current && localStreamRef.current) {
+          localVideoRef.current.srcObject = localStreamRef.current;
+          localVideoRef.current.play().catch(() => {});
+        }
+        if (remoteVideoRef.current && remoteStreamRef.current) {
+          remoteVideoRef.current.srcObject = remoteStreamRef.current;
+          remoteVideoRef.current.play().catch(() => {});
+        }
+      }, 50);
+    } else if (isMinimized && callState === "in-call") {
+      setTimeout(() => {
+        if (miniVideoRef.current) {
+          const stream = remoteStreamRef.current || localStreamRef.current;
+          if (stream) {
+            miniVideoRef.current.srcObject = stream;
+            miniVideoRef.current.play().catch(() => {});
+          }
+        }
+      }, 50);
+    }
+  }, [isMinimized, callState]);
 
   // Format call duration MM:SS
   const formatTime = (secs) => {
@@ -138,6 +200,10 @@ export default function CallModal({
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = event.streams[0];
           remoteVideoRef.current.play().catch(() => {});
+        }
+        if (miniVideoRef.current) {
+          miniVideoRef.current.srcObject = event.streams[0];
+          miniVideoRef.current.play().catch(() => {});
         }
       }
     };
@@ -448,6 +514,7 @@ export default function CallModal({
     }
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (miniVideoRef.current) miniVideoRef.current.srcObject = null;
     pendingCandidatesRef.current = [];
   };
 
@@ -573,8 +640,128 @@ export default function CallModal({
 
   const activeContact = callState === "incoming" ? callerInfo : peerUser;
 
+  // ========================================================
+  // RENDER MINIMIZED FLOATING CARD (When minimized in-call or outgoing)
+  // ========================================================
+  if (isMinimized && (callState === "in-call" || callState === "outgoing")) {
+    return (
+      <div
+        onClick={() => setMinimizedState(false)}
+        className="fixed bottom-6 right-6 z-[250] w-80 sm:w-96 bg-[#111728]/95 border-2 border-emerald-500/50 rounded-3xl p-4 shadow-[0_12px_45px_rgba(0,0,0,0.8)] backdrop-blur-2xl cursor-pointer hover:border-emerald-400 transition-all transform hover:scale-[1.02] select-none group"
+      >
+        {/* Floating Mini Header */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <span className="text-[11px] font-bold text-emerald-400 tracking-wider uppercase">
+              {callState === "in-call" ? "Active Call" : "Calling..."}
+            </span>
+            <span className="text-xs text-gray-300 font-mono font-bold">
+              {formatTime(duration)}
+            </span>
+          </div>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setMinimizedState(false);
+            }}
+            className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition flex items-center gap-1 text-[11px] font-semibold"
+            title="Maximize Call"
+          >
+            <span>Expand</span>
+            <IconMaximize className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Floating Mini Body */}
+        <div className="flex items-center gap-3 mb-3">
+          {callType === "video" ? (
+            <div className="relative w-16 h-16 rounded-2xl overflow-hidden border border-white/20 bg-black flex-shrink-0 shadow-inner">
+              <video
+                ref={setMiniVideo}
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="relative flex-shrink-0">
+              <img
+                src={
+                  activeContact?.avatar ||
+                  `https://api.dicebear.com/7.x/bottts/svg?seed=${activeContact?.username || "user"}`
+                }
+                alt={activeContact?.name || "User"}
+                className="w-14 h-14 rounded-2xl object-cover border-2 border-emerald-500/30 shadow-md"
+              />
+              <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#111728] rounded-full"></span>
+            </div>
+          )}
+
+          <div className="min-w-0 flex-1">
+            <h4 className="text-white font-bold text-sm truncate">
+              {activeContact?.name || activeContact?.username}
+            </h4>
+            <p className="text-[11px] text-emerald-400/90 font-medium truncate flex items-center gap-1">
+              <span>Tap to restore call screen ↗</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Floating Mini Controls Bar */}
+        <div
+          className="flex items-center justify-between pt-2.5 border-t border-white/10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleMute}
+              className={`p-2 rounded-xl text-xs transition ${
+                isMuted
+                  ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                  : "bg-white/10 hover:bg-white/20 text-white"
+              }`}
+              title={isMuted ? "Unmute Mic" : "Mute Mic"}
+            >
+              {isMuted ? <IconMicOff className="w-4 h-4" /> : <IconMic className="w-4 h-4" />}
+            </button>
+
+            {callType === "video" && (
+              <button
+                onClick={toggleVideo}
+                className={`p-2 rounded-xl text-xs transition ${
+                  isVideoDisabled
+                    ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                    : "bg-white/10 hover:bg-white/20 text-white"
+                }`}
+                title={isVideoDisabled ? "Turn Video On" : "Turn Video Off"}
+              >
+                {isVideoDisabled ? <IconCameraOff className="w-4 h-4" /> : <IconCamera className="w-4 h-4" />}
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={handleHangUp}
+            className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-red-600/30 transition transform hover:scale-105"
+          >
+            <IconPhoneOff className="w-3.5 h-3.5" />
+            <span>End Call</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ========================================================
+  // RENDER FULL-SCREEN MODAL
+  // ========================================================
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-xl animate-fade-in font-sans">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-xl animate-fade-in font-sans select-none">
       {/* Background glow effects */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-violet-600/20 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-600/20 rounded-full blur-[120px] pointer-events-none"></div>
@@ -583,7 +770,18 @@ export default function CallModal({
       {/* 1. OUTGOING & INCOMING CALL SCREEN */}
       {/* ==================================================== */}
       {(callState === "outgoing" || callState === "incoming") && (
-        <div className="relative w-full max-w-sm mx-4 bg-[#111622]/90 border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col items-center text-center">
+        <div className="relative w-full max-w-sm mx-4 bg-[#111622]/95 border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col items-center text-center">
+          {/* Minimize button for outgoing calls */}
+          {callState === "outgoing" && (
+            <button
+              onClick={() => setMinimizedState(true)}
+              className="absolute top-4 right-4 p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition"
+              title="Minimize to floating card"
+            >
+              <IconMinimize className="w-5 h-5" />
+            </button>
+          )}
+
           {/* Avatar with pulsing rings */}
           <div className="relative my-6">
             <div className="absolute -inset-4 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-500 rounded-full opacity-60 animate-ping"></div>
@@ -676,13 +874,25 @@ export default function CallModal({
                   <span className="text-xs text-gray-300 font-mono">
                     {formatTime(duration)}
                   </span>
-                  <span className="text-[10px] text-gray-400">• End-to-End Encrypted</span>
+                  <span className="text-[10px] text-gray-400 hidden sm:inline">• End-to-End Encrypted</span>
                 </div>
               </div>
             </div>
 
-            <div className="px-3 py-1 rounded-full bg-white/10 text-xs font-semibold text-gray-300 border border-white/10">
-              {callType === "video" ? "HD Video" : "HD Audio"}
+            <div className="flex items-center gap-3">
+              <div className="px-3 py-1 rounded-full bg-white/10 text-xs font-semibold text-gray-300 border border-white/10">
+                {callType === "video" ? "HD Video" : "HD Audio"}
+              </div>
+
+              {/* Minimize Button */}
+              <button
+                onClick={() => setMinimizedState(true)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition flex items-center gap-1.5 text-xs font-medium border border-white/10"
+                title="Minimize Call to Floating Card"
+              >
+                <IconMinimize className="w-4 h-4" />
+                <span className="hidden sm:inline">Minimize</span>
+              </button>
             </div>
           </div>
 
@@ -698,7 +908,7 @@ export default function CallModal({
               }`}
             />
 
-            {/* Audio Mode Graphic or when Remote Video is Not Visible */}
+            {/* Audio Mode Graphic */}
             {callType === "audio" && (
               <div className="flex flex-col items-center justify-center z-10 text-center px-4">
                 <div className="relative mb-6">
