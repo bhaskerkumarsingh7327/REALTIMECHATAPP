@@ -8,6 +8,7 @@ import { serverUrl } from "../main";
 import Logo from "../components/Logo";
 import CallModal from "../components/CallModal";
 import UserProfileModal from "../components/UserProfileModal";
+import MyProfileModal from "../components/MyProfileModal";
 import VoiceRecorder from "../components/VoiceRecorder";
 import EmojiPicker from "../components/EmojiPicker";
 import AudioMessage from "../components/AudioMessage";
@@ -32,6 +33,7 @@ import {
   IconMaximize,
   IconCopy,
   IconBan,
+  IconCamera,
 } from "../components/Icons";
 import { sounds } from "../utils/soundEffects";
 import { PULSE_AI_USER, generateAIResponse } from "../utils/aiBot";
@@ -71,9 +73,13 @@ export default function Home() {
   const [remoteTypingUser, setRemoteTypingUser] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
 
+  // Blocked users set for instant reactive updates
+  const [blockedUserIds, setBlockedUserIds] = useState(new Set());
+
   // Modals & UI states
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showMyProfileModal, setShowMyProfileModal] = useState(false);
   const [searchFilter, setSearchFilter] = useState("");
   const [userSearchResults, setUserSearchResults] = useState([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
@@ -106,6 +112,27 @@ export default function Home() {
   useEffect(() => {
     scrollToBottom();
   }, [selectedChat?.messages, remoteTypingUser]);
+
+  // Sync blocked user ids whenever userData changes
+  useEffect(() => {
+    if (userData?.blockedUsers && Array.isArray(userData.blockedUsers)) {
+      setBlockedUserIds(new Set(userData.blockedUsers.map((b) => String(b?._id || b))));
+    }
+  }, [userData?.blockedUsers]);
+
+  // Fetch fresh current user profile on mount
+  useEffect(() => {
+    if (userData?._id) {
+      axios
+        .get(`${serverUrl}/api/user/current`)
+        .then((res) => {
+          if (res.data?.user) {
+            dispatch(setUserData(res.data.user));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [userData?._id, dispatch]);
 
   // Sound toggle helper
   const toggleSoundMute = () => {
@@ -437,35 +464,55 @@ export default function Home() {
 
   // Block status check
   const isContactBlockedByMe = currentPartner?._id
-    ? userData?.blockedUsers?.some((b) => String(b?._id || b) === String(currentPartner._id))
+    ? blockedUserIds.has(String(currentPartner._id))
     : false;
 
-  // 2. Block / Unblock Contact
+  // 2. Block / Unblock Contact (instant zero-lag optimistic feedback)
   const handleToggleBlockContact = async () => {
     if (!currentPartner?._id || selectedChat?.isAIChat) return;
 
-    const willBlock = !isContactBlockedByMe;
+    const targetId = String(currentPartner._id);
+    const currentlyBlocked = blockedUserIds.has(targetId);
+    const willBlock = !currentlyBlocked;
+
     const confirmPrompt = willBlock
       ? `Are you sure you want to block ${currentPartner.name || currentPartner.username}? They won't be able to message or call you.`
       : `Unblock ${currentPartner.name || currentPartner.username}?`;
 
     if (!window.confirm(confirmPrompt)) return;
 
+    // Instant optimistic update
+    setBlockedUserIds((prev) => {
+      const next = new Set(prev);
+      if (willBlock) next.add(targetId);
+      else next.delete(targetId);
+      return next;
+    });
+
     try {
       const res = await axios.post(`${serverUrl}/api/user/block`, {
-        targetUserId: currentPartner._id,
+        targetUserId: targetId,
       });
 
-      const isBlockedNow = res.data.isBlocked;
-      dispatch(setUserData(res.data.user));
+      if (res.data?.user) {
+        dispatch(setUserData(res.data.user));
+      }
 
       socketRef.current?.emit("user-blocked-status", {
         blockerId: userData._id,
-        targetId: currentPartner._id,
-        isBlocked: isBlockedNow,
+        targetId: targetId,
+        isBlocked: willBlock,
       });
     } catch (err) {
       console.error("Block user error:", err);
+      // Revert state on error
+      setBlockedUserIds((prev) => {
+        const next = new Set(prev);
+        if (currentlyBlocked) next.add(targetId);
+        else next.delete(targetId);
+        return next;
+      });
+      alert("Could not update block status. Please try again.");
     }
   };
 
@@ -974,14 +1021,14 @@ export default function Home() {
               {isMutedSounds ? <IconVolumeX className="w-4 h-4" /> : <IconVolume2 className="w-4 h-4" />}
             </button>
 
-            {/* Profile Settings */}
-            <Link
-              to="/profile"
+            {/* Edit My Profile Button */}
+            <button
+              onClick={() => setShowMyProfileModal(true)}
               className="p-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-gray-300 hover:text-white rounded-xl transition"
-              title="Profile Settings"
+              title="Edit Profile & Picture"
             >
               <IconUser className="w-4 h-4" />
-            </Link>
+            </button>
 
             {/* New Chat Button */}
             <button
@@ -1006,32 +1053,38 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Current User Quick Info Card */}
-        <div className="px-4 py-3 mx-3.5 my-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-between shadow-sm">
+        {/* Current User Quick Info Card (Click to edit picture) */}
+        <div
+          onClick={() => setShowMyProfileModal(true)}
+          className="px-4 py-3 mx-3.5 my-2.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.08] flex items-center justify-between shadow-sm cursor-pointer group transition"
+          title="Click to edit profile & change picture"
+        >
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative flex-shrink-0">
               <img
                 src={userData?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${userData?.username || "me"}`}
                 alt={userData?.username}
-                className="w-10 h-10 rounded-full object-cover ring-2 ring-violet-500/50"
+                className="w-10 h-10 rounded-full object-cover ring-2 ring-violet-500/50 group-hover:ring-violet-400 group-hover:scale-105 transition"
               />
               <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#0d111d] rounded-full shadow-sm"></span>
             </div>
             <div className="min-w-0">
-              <h4 className="font-bold text-sm text-white truncate leading-tight">
+              <h4 className="font-bold text-sm text-white truncate leading-tight group-hover:text-violet-300 transition">
                 {userData?.name || userData?.username}
               </h4>
               <p className="text-[11px] text-emerald-400 font-medium truncate flex items-center gap-1">
-                <span>● Online</span>
+                <span>● Active</span>
                 <span className="text-gray-500">•</span>
-                <span className="text-gray-400 truncate">@{userData?.username}</span>
+                <span className="text-gray-400 truncate">Change picture ↗</span>
               </p>
             </div>
           </div>
 
-          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            Encrypted
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="p-1.5 rounded-lg bg-white/5 group-hover:bg-violet-600/20 text-gray-400 group-hover:text-violet-300 transition">
+              <IconCamera className="w-4 h-4" />
+            </span>
+          </div>
         </div>
 
         {/* Search Input Filter */}
@@ -1283,18 +1336,18 @@ export default function Home() {
               </div>
             </div>
 
-            {/* BLOCKED CONTACT WARNING BANNER */}
+            {/* BLOCKED CONTACT WARNING BANNER WITH INSTANT UNBLOCK */}
             {isContactBlockedByMe && (
-              <div className="bg-red-500/15 border-b border-red-500/30 px-4 py-2 flex items-center justify-between text-xs text-red-300 z-20">
-                <div className="flex items-center gap-2">
-                  <IconBan className="w-4 h-4 text-red-400" />
-                  <span>You have blocked this contact. Unblock to message or call.</span>
+              <div className="bg-red-500/20 border-b border-red-500/35 px-4 py-2.5 flex items-center justify-between text-xs text-red-200 z-20 backdrop-blur-md animate-fade-in shadow-md">
+                <div className="flex items-center gap-2 min-w-0">
+                  <IconBan className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <span className="truncate">You have blocked this contact. They cannot message or call you.</span>
                 </div>
                 <button
                   onClick={handleToggleBlockContact}
-                  className="px-3 py-1 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-white font-bold transition text-xs"
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs transition shadow-md hover:scale-105 active:scale-95 flex-shrink-0 ml-2"
                 >
-                  Unblock
+                  Unblock Contact
                 </button>
               </div>
             )}
@@ -1525,14 +1578,14 @@ export default function Home() {
             <div className="relative p-3 md:p-4 bg-[#0e1322]/90 border-t border-white/[0.08] backdrop-blur-xl">
               {/* If user is blocked */}
               {isContactBlockedByMe ? (
-                <div className="flex items-center justify-center gap-3 py-2 text-xs text-gray-400">
+                <div className="flex items-center justify-center gap-3 py-3 px-4 text-xs text-gray-300 bg-[#0e1322]/90 rounded-2xl border border-white/5">
                   <IconBan className="w-4 h-4 text-red-400" />
                   <span>You have blocked this contact.</span>
                   <button
                     onClick={handleToggleBlockContact}
-                    className="text-violet-400 hover:text-violet-300 font-bold underline"
+                    className="px-4 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 font-bold transition hover:scale-105 active:scale-95 ml-2"
                   >
-                    Unblock to chat
+                    Unblock to Chat
                   </button>
                 </div>
               ) : (
@@ -1682,7 +1735,7 @@ export default function Home() {
       />
 
       {/* ======================================================== */}
-      {/* 4. USER PROFILE MODAL */}
+      {/* 4. CONTACT USER PROFILE MODAL */}
       {/* ======================================================== */}
       {showProfileModal && currentPartner && (
         <UserProfileModal
@@ -1701,7 +1754,21 @@ export default function Home() {
       )}
 
       {/* ======================================================== */}
-      {/* 5. NEW CHAT SEARCH MODAL */}
+      {/* 5. EDIT MY PROFILE & PICTURE MODAL */}
+      {/* ======================================================== */}
+      {showMyProfileModal && (
+        <MyProfileModal
+          onClose={() => setShowMyProfileModal(false)}
+          onAvatarUpdated={(newAvatar) => {
+            if (socketRef.current) {
+              socketRef.current.userAvatar = newAvatar;
+            }
+          }}
+        />
+      )}
+
+      {/* ======================================================== */}
+      {/* 6. NEW CHAT SEARCH MODAL */}
       {/* ======================================================== */}
       {showNewChatModal && (
         <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
@@ -1767,7 +1834,7 @@ export default function Home() {
       )}
 
       {/* ======================================================== */}
-      {/* 6. IMAGE LIGHTBOX MODAL */}
+      {/* 7. IMAGE LIGHTBOX MODAL */}
       {/* ======================================================== */}
       {previewImage && (
         <div

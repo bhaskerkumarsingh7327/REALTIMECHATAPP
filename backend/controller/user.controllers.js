@@ -3,7 +3,9 @@ import User from "../models/user.model.js";
 export const getCurrentUser = async (req, res) => {
   try {
     const userId = req.userId;
-    const user = await User.findById(userId).select("-password").populate("blockedUsers", "username name avatar");
+    const user = await User.findById(userId)
+      .select("-password")
+      .populate("blockedUsers", "username name avatar");
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -25,7 +27,9 @@ export const updateProfile = async (req, res) => {
 
     const updatedUser = await User.findByIdAndUpdate(userId, updates, {
       new: true,
-    }).select("-password");
+    })
+      .select("-password")
+      .populate("blockedUsers", "username name avatar");
 
     if (!updatedUser) {
       return res.status(404).json({ message: "User not found" });
@@ -82,7 +86,9 @@ export const toggleBlockUser = async (req, res) => {
     }
 
     await user.save();
-    const updated = await User.findById(userId).select("-password");
+    const updated = await User.findById(userId)
+      .select("-password")
+      .populate("blockedUsers", "username name avatar");
 
     return res.status(200).json({
       message: isBlocked ? "User blocked successfully" : "User unblocked successfully",

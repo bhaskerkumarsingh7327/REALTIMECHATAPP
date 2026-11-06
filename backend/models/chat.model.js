@@ -9,6 +9,16 @@ const reactionSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const replyToSchema = new mongoose.Schema(
+  {
+    messageId: { type: String },
+    sender: { type: String },
+    text: { type: String },
+    mediaType: { type: String },
+  },
+  { _id: false }
+);
+
 const messageSchema = new mongoose.Schema({
   sender: { type: String, required: true },
   senderId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -18,6 +28,7 @@ const messageSchema = new mongoose.Schema({
   fileName: { type: String, default: "" },
   fileSize: { type: String, default: "" },
   reactions: [reactionSchema],
+  replyTo: replyToSchema,
   system: { type: Boolean, default: false },
   seen: { type: Boolean, default: false },
   seenAt: { type: Date },
@@ -28,6 +39,7 @@ const chatSchema = new mongoose.Schema(
   {
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }],
     messages: [messageSchema],
+    pinnedMessage: { type: Object, default: null },
     lastMessage: { type: String, default: "" },
     lastMessageAt: { type: Date, default: Date.now },
   },

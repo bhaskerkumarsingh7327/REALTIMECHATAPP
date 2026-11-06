@@ -55,10 +55,10 @@ export const createOrGetChat = async (req, res) => {
   }
 };
 
-// 3. SEND MESSAGE
+// 3. SEND MESSAGE (supports text, media, voice, replies)
 export const sendMessage = async (req, res) => {
   try {
-    const { chatId, sender, senderId, recipientId, text, mediaUrl, mediaType, fileName, fileSize, system } = req.body;
+    const { chatId, sender, senderId, recipientId, text, mediaUrl, mediaType, fileName, fileSize, system, replyTo } = req.body;
 
     if (!chatId || !sender) {
       return res.status(400).json({ error: "chatId and sender are required" });
@@ -81,6 +81,7 @@ export const sendMessage = async (req, res) => {
       fileName: fileName || "",
       fileSize: fileSize || "",
       system: !!system,
+      replyTo: replyTo || null,
       seen: false,
       seenAt: null,
       createdAt: new Date(),
@@ -132,7 +133,6 @@ export const markChatAsSeen = async (req, res) => {
     let modified = false;
 
     chat.messages.forEach((msg) => {
-      // Mark as seen if message was sent by other party and is not yet seen
       if (msg.senderId && String(msg.senderId) !== String(userId) && !msg.seen) {
         msg.seen = true;
         msg.seenAt = now;
@@ -150,7 +150,44 @@ export const markChatAsSeen = async (req, res) => {
   }
 };
 
-// 5. CLEAR CHAT HISTORY
+// 5. PIN MESSAGE
+export const pinMessage = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { messageId } = req.body;
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    const message = chat.messages.id(messageId);
+    if (!message) return res.status(404).json({ error: "Message not found" });
+
+    chat.pinnedMessage = message;
+    await chat.save();
+
+    res.status(200).json({ success: true, pinnedMessage: message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// 6. UNPIN MESSAGE
+export const unpinMessage = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const chat = await Chat.findById(chatId);
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    chat.pinnedMessage = null;
+    await chat.save();
+
+    res.status(200).json({ success: true, message: "Message unpinned" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// 7. CLEAR CHAT HISTORY
 export const clearChatHistory = async (req, res) => {
   try {
     const { chatId } = req.params;
@@ -158,6 +195,7 @@ export const clearChatHistory = async (req, res) => {
     if (!chat) return res.status(404).json({ error: "Chat not found" });
 
     chat.messages = [];
+    chat.pinnedMessage = null;
     chat.lastMessage = "Chat cleared";
     chat.lastMessageAt = new Date();
     await chat.save();
@@ -168,7 +206,7 @@ export const clearChatHistory = async (req, res) => {
   }
 };
 
-// 6. ADD / TOGGLE REACTION
+// 8. ADD / TOGGLE REACTION
 export const addReaction = async (req, res) => {
   try {
     const { chatId, messageId, emoji, username, userId } = req.body;
@@ -200,7 +238,7 @@ export const addReaction = async (req, res) => {
   }
 };
 
-// 7. DELETE A MESSAGE
+// 9. DELETE A MESSAGE
 export const deleteMessage = async (req, res) => {
   try {
     const { chatId, messageId } = req.params;
@@ -208,6 +246,9 @@ export const deleteMessage = async (req, res) => {
     if (!chat) return res.status(404).json({ error: "Chat not found" });
 
     chat.messages = chat.messages.filter((m) => m._id.toString() !== messageId);
+    if (chat.pinnedMessage && chat.pinnedMessage._id?.toString() === messageId) {
+      chat.pinnedMessage = null;
+    }
     await chat.save();
 
     res.status(200).json({ success: true, messageId });
@@ -216,7 +257,7 @@ export const deleteMessage = async (req, res) => {
   }
 };
 
-// 8. DELETE CHAT
+// 10. DELETE CHAT
 export const deleteChat = async (req, res) => {
   try {
     const { chatId } = req.params;
@@ -232,7 +273,7 @@ export const deleteChat = async (req, res) => {
   }
 };
 
-// 9. SEARCH USERS
+// 11. SEARCH USERS
 export const searchUsers = async (req, res) => {
   try {
     const { query, myId } = req.query;
