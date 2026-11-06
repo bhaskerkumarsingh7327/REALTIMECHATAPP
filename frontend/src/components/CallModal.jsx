@@ -42,16 +42,40 @@ export default function CallModal({
   const remoteVideoRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
+  const remoteStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
   const timerRef = useRef(null);
+  const durationRef = useRef(0);
   const pendingCandidatesRef = useRef([]);
 
-  // Keep target ID updated in a ref to avoid stale closures in WebRTC callbacks
+  // Keep target ID updated in a ref
   const targetIdRef = useRef(null);
   useEffect(() => {
     const tid = callerInfo?._id || peerUser?._id;
     if (tid) targetIdRef.current = String(tid);
   }, [callerInfo, peerUser]);
+
+  // Keep duration ref in sync for callbacks
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
+
+  // Callback ref helpers to ensure streams attach the moment video tags mount into the DOM
+  const setLocalVideo = (el) => {
+    localVideoRef.current = el;
+    if (el && localStreamRef.current) {
+      el.srcObject = localStreamRef.current;
+      el.play().catch(() => {});
+    }
+  };
+
+  const setRemoteVideo = (el) => {
+    remoteVideoRef.current = el;
+    if (el && remoteStreamRef.current) {
+      el.srcObject = remoteStreamRef.current;
+      el.play().catch(() => {});
+    }
+  };
 
   // Format call duration MM:SS
   const formatTime = (secs) => {
@@ -64,9 +88,20 @@ export default function CallModal({
   useEffect(() => {
     if (callState === "in-call") {
       setDuration(0);
+      durationRef.current = 0;
       timerRef.current = setInterval(() => {
         setDuration((prev) => prev + 1);
       }, 1000);
+
+      // Re-attach streams to elements
+      if (localVideoRef.current && localStreamRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+        localVideoRef.current.play().catch(() => {});
+      }
+      if (remoteVideoRef.current && remoteStreamRef.current) {
+        remoteVideoRef.current.srcObject = remoteStreamRef.current;
+        remoteVideoRef.current.play().catch(() => {});
+      }
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
@@ -98,8 +133,12 @@ export default function CallModal({
     // When remote track arrives
     pc.ontrack = (event) => {
       console.log("[WEBRTC] Remote track received:", event.track.kind);
-      if (remoteVideoRef.current && event.streams && event.streams[0]) {
-        remoteVideoRef.current.srcObject = event.streams[0];
+      if (event.streams && event.streams[0]) {
+        remoteStreamRef.current = event.streams[0];
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+          remoteVideoRef.current.play().catch(() => {});
+        }
       }
     };
 
@@ -119,15 +158,19 @@ export default function CallModal({
       if (pc.connectionState === "connected") {
         if (onCallAccepted) onCallAccepted();
       } else if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-        console.warn("[WEBRTC] Connection lost or failed.");
+        console.warn("[WEBRTC] Connection disconnected or failed.");
       }
     };
 
     return pc;
   };
 
-  // Get User Media Stream
+  // Get User Media Stream (with automatic fallback to audio if camera is busy or denied)
   const getMediaStream = async (type = callType) => {
+    if (localStreamRef.current) {
+      return localStreamRef.current;
+    }
+
     try {
       const constraints = {
         audio: true,
@@ -147,18 +190,19 @@ export default function CallModal({
 
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(() => {});
       }
 
       return stream;
     } catch (err) {
-      console.warn("[WEBRTC] Could not get requested media, attempting audio-only fallback:", err);
+      console.warn("[WEBRTC] Camera request error, trying audio-only fallback:", err);
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         localStreamRef.current = audioStream;
         setIsVideoDisabled(true);
         return audioStream;
       } catch (audioErr) {
-        console.error("[WEBRTC] Microphone access denied or unavailable:", audioErr);
+        console.error("[WEBRTC] Microphone permission denied or unavailable:", audioErr);
         throw audioErr;
       }
     }
@@ -183,7 +227,7 @@ export default function CallModal({
           const target = String(peerUser._id);
           targetIdRef.current = target;
 
-          console.log(`[WEBRTC] Sending call offer to ${target}...`);
+          console.log(`[WEBRTC] Emitting call offer to ${target}...`);
           socket.emit("call-user", {
             recipientId: target,
             offer,
@@ -196,8 +240,12 @@ export default function CallModal({
             },
           });
         } catch (err) {
-          console.error("[WEBRTC] Failed to start outgoing call:", err);
-          onEndCall("Microphone/Camera access is required for calling.");
+          console.error("[WEBRTC] Outgoing call initiation failed:", err);
+          onEndCall({
+            duration: 0,
+            callType,
+            status: "cancelled",
+          });
         }
       };
 
@@ -222,7 +270,7 @@ export default function CallModal({
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
 
-          // Apply any pending candidates received before answer
+          // Apply pending candidates
           for (const cand of pendingCandidatesRef.current) {
             try {
               await pc.addIceCandidate(new RTCIceCandidate(cand));
@@ -257,7 +305,11 @@ export default function CallModal({
       sounds.stopAllSounds();
       sounds.playCallEnded();
       cleanupMedia();
-      onEndCall("Call was declined.");
+      onEndCall({
+        duration: 0,
+        callType,
+        status: "declined",
+      });
     };
 
     // Call was ended by remote party
@@ -265,8 +317,13 @@ export default function CallModal({
       console.log("[WEBRTC] Remote party ended call.");
       sounds.stopAllSounds();
       sounds.playCallEnded();
+      const currentDur = durationRef.current;
       cleanupMedia();
-      onEndCall();
+      onEndCall({
+        duration: currentDur,
+        callType,
+        status: currentDur > 0 ? "completed" : "missed",
+      });
     };
 
     // Remote media status changed
@@ -343,7 +400,11 @@ export default function CallModal({
       });
     }
     cleanupMedia();
-    onEndCall();
+    onEndCall({
+      duration: 0,
+      callType,
+      status: "declined",
+    });
   };
 
   // 4. HANG UP ACTIVE / OUTGOING CALL
@@ -356,8 +417,13 @@ export default function CallModal({
       socket.emit("end-call", { to: target });
     }
 
+    const currentDur = durationRef.current;
     cleanupMedia();
-    onEndCall();
+    onEndCall({
+      duration: currentDur,
+      callType,
+      status: currentDur > 0 ? "completed" : "cancelled",
+    });
   };
 
   // Cleanup helper
@@ -367,6 +433,10 @@ export default function CallModal({
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
+    }
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach((t) => t.stop());
+      remoteStreamRef.current = null;
     }
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -409,7 +479,6 @@ export default function CallModal({
         videoTrack.enabled = !videoTrack.enabled;
         setIsVideoDisabled(!videoTrack.enabled);
       } else {
-        // If starting from audio call, acquire video track
         try {
           const videoStream = await navigator.mediaDevices.getUserMedia({
             video: true,
@@ -423,10 +492,11 @@ export default function CallModal({
 
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = localStreamRef.current;
+            localVideoRef.current.play().catch(() => {});
           }
           setIsVideoDisabled(false);
         } catch (e) {
-          console.warn("Could not enable camera:", e);
+          console.warn("[WEBRTC] Could not enable camera:", e);
         }
       }
 
@@ -462,6 +532,7 @@ export default function CallModal({
 
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
+          localVideoRef.current.play().catch(() => {});
         }
 
         screenTrack.onended = () => {
@@ -492,6 +563,7 @@ export default function CallModal({
       }
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = localStreamRef.current;
+        localVideoRef.current.play().catch(() => {});
       }
     }
     setIsScreenSharing(false);
@@ -618,11 +690,11 @@ export default function CallModal({
           <div className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden">
             {/* Remote Video Stream */}
             <video
-              ref={remoteVideoRef}
+              ref={setRemoteVideo}
               autoPlay
               playsInline
               className={`w-full h-full object-cover transition-opacity duration-300 ${
-                callType === "video" ? "opacity-100" : "hidden"
+                callType === "video" ? "block" : "hidden"
               }`}
             />
 
@@ -669,7 +741,7 @@ export default function CallModal({
             {callType === "video" && (
               <div className="absolute bottom-28 right-4 md:right-8 md:bottom-28 z-20 w-32 h-44 md:w-44 md:h-60 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-gray-900 group">
                 <video
-                  ref={localVideoRef}
+                  ref={setLocalVideo}
                   autoPlay
                   muted
                   playsInline

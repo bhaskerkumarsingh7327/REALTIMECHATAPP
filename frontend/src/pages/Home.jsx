@@ -601,6 +601,77 @@ export default function Home() {
     setCallState("outgoing");
   };
 
+  // WhatsApp-style Call Status Handler
+  const handleCallEnded = async (callData = {}) => {
+    const duration = typeof callData === "object" ? (callData.duration || 0) : 0;
+    const cType = (typeof callData === "object" && callData.callType) ? callData.callType : callType;
+    const status = (typeof callData === "object" && callData.status) ? callData.status : "completed";
+    const reason = typeof callData === "string" ? callData : null;
+
+    setCallState("idle");
+    setCallerInfo(null);
+    setIncomingOffer(null);
+
+    if (reason && duration === 0) {
+      console.log("[CALL END REASON]", reason);
+    }
+
+    if (!selectedChat || selectedChat.isAIChat) return;
+
+    // Generate WhatsApp-style call summary notification
+    const icon = cType === "video" ? "📹" : "📞";
+    const typeLabel = cType === "video" ? "Video call" : "Voice call";
+    let summaryText = "";
+
+    if (duration > 0) {
+      const mins = Math.floor(duration / 60);
+      const secs = duration % 60;
+      const durStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+      summaryText = `${icon} ${typeLabel} ended • ${durStr}`;
+    } else if (status === "declined") {
+      summaryText = `📵 ${typeLabel} declined`;
+    } else if (status === "missed") {
+      summaryText = `❌ Missed ${typeLabel.toLowerCase()}`;
+    } else {
+      summaryText = `${icon} ${typeLabel} ended`;
+    }
+
+    try {
+      const msgPayload = {
+        chatId: selectedChat._id,
+        sender: "System",
+        senderId: userData._id,
+        text: summaryText,
+        mediaType: "system",
+        system: true,
+      };
+
+      const res = await axios.post(`${serverUrl}/api/chat/message`, msgPayload);
+      const saved = res.data;
+
+      socketRef.current?.emit("send-message", {
+        roomId: selectedChat._id,
+        message: saved,
+        recipientId: currentPartner?._id,
+      });
+
+      setSelectedChat((prev) => ({
+        ...prev,
+        messages: [...(prev.messages || []), saved],
+      }));
+
+      setChats((prev) =>
+        prev.map((c) =>
+          c._id === selectedChat._id
+            ? { ...c, messages: [...(c.messages || []), saved], lastMessage: summaryText, lastMessageAt: new Date() }
+            : c
+        )
+      );
+    } catch (err) {
+      console.error("Error creating call notification in chat:", err);
+    }
+  };
+
   // 10. User Search & New Chat
   const handleUserSearch = async (val) => {
     setSearchFilter(val);
@@ -940,6 +1011,25 @@ export default function Home() {
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
               {selectedChat.messages?.map((msg, idx) => {
                 const isSender = msg.sender === userData.username;
+                const isSystem = msg.system || msg.mediaType === "system" || msg.sender === "System";
+
+                if (isSystem) {
+                  return (
+                    <div key={msg._id || idx} className="flex justify-center my-3 w-full">
+                      <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.06] border border-white/10 text-xs text-gray-300 font-medium shadow-sm backdrop-blur-sm">
+                        <span>{msg.text}</span>
+                        <span className="text-[10px] text-gray-500 font-mono">
+                          {msg.createdAt
+                            ? new Date(msg.createdAt).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : ""}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
 
                 return (
                   <div
@@ -1184,12 +1274,7 @@ export default function Home() {
         incomingOffer={incomingOffer}
         socket={socketRef.current}
         currentUser={userData}
-        onEndCall={(reason) => {
-          setCallState("idle");
-          setCallerInfo(null);
-          setIncomingOffer(null);
-          if (reason) alert(reason);
-        }}
+        onEndCall={handleCallEnded}
         onCallAccepted={() => {
           setCallState("in-call");
         }}
