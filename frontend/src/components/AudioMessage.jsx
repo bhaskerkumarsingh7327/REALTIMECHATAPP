@@ -76,8 +76,8 @@ export default function AudioMessage({ audioUrl, isSender }) {
         onClick={togglePlay}
         className={`w-9 h-9 rounded-full flex items-center justify-center transition shadow-md flex-shrink-0 ${
           isSender
-            ? "bg-white text-violet-700 hover:bg-violet-100"
-            : "bg-violet-600 text-white hover:bg-violet-500"
+            ? "bg-white text-blue-600 hover:bg-blue-50"
+            : "bg-blue-600 text-white hover:bg-blue-500"
         }`}
       >
         {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4 ml-0.5" />}
@@ -91,7 +91,7 @@ export default function AudioMessage({ audioUrl, isSender }) {
         >
           <div
             className={`h-full rounded-full transition-all duration-100 ${
-              isSender ? "bg-white" : "bg-gradient-to-r from-violet-400 to-cyan-400"
+              isSender ? "bg-white" : "bg-blue-500"
             }`}
             style={{ width: `${progress}%` }}
           ></div>

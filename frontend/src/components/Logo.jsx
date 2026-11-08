@@ -4,8 +4,8 @@ export default function Logo({ size = "md", showTag = true, className = "" }) {
   const sizeClasses = {
     sm: "w-8 h-8 text-xs",
     md: "w-10 h-10 text-sm",
-    lg: "w-14 h-14 text-base",
-    xl: "w-16 h-16 text-lg",
+    lg: "w-12 h-12 text-base",
+    xl: "w-14 h-14 text-lg",
   };
 
   const titleSizes = {
@@ -17,33 +17,17 @@ export default function Logo({ size = "md", showTag = true, className = "" }) {
 
   return (
     <div className={`flex items-center gap-3 select-none ${className}`}>
-      {/* Icon with glowing aura */}
+      {/* Icon with natural subtle aura */}
       <div className="relative group">
-        <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-400 rounded-2xl blur-sm opacity-70 group-hover:opacity-100 transition duration-300"></div>
+        <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl blur-sm opacity-50 group-hover:opacity-80 transition duration-300"></div>
         <div
-          className={`relative ${sizeClasses[size] || sizeClasses.md} rounded-2xl bg-[#0e131f] border border-white/20 flex items-center justify-center shadow-inner overflow-hidden`}
+          className={`relative ${sizeClasses[size] || sizeClasses.md} rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 border border-blue-400/30 flex items-center justify-center shadow-lg shadow-blue-600/20 overflow-hidden`}
         >
-          {/* Animated gradient wave */}
-          <svg viewBox="0 0 40 40" className="w-4/5 h-4/5" fill="none">
-            <defs>
-              <linearGradient id="pulseGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#8b5cf6" />
-                <stop offset="50%" stopColor="#d946ef" />
-                <stop offset="100%" stopColor="#06b6d4" />
-              </linearGradient>
-            </defs>
-            {/* Outer ring */}
-            <circle cx="20" cy="20" r="16" stroke="url(#pulseGrad)" strokeWidth="2" strokeDasharray="4 2" className="animate-[spin_12s_linear_infinite]" />
-            {/* Pulse waveform */}
-            <path
-              d="M10 20h4l2-5 4 10 3-8 3 4 4-1"
-              stroke="url(#pulseGrad)"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            {/* Center dot */}
-            <circle cx="20" cy="20" r="2.5" fill="#38bdf8" className="animate-ping opacity-75" />
+          {/* Natural clean pulse waveform */}
+          <svg viewBox="0 0 24 24" className="w-3/5 h-3/5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="rgba(255,255,255,0.15)" stroke="none" />
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <path d="M8 10h.01M12 10h.01M16 10h.01" strokeWidth="3" />
           </svg>
         </div>
       </div>
@@ -51,17 +35,17 @@ export default function Logo({ size = "md", showTag = true, className = "" }) {
       {/* Brand Text */}
       <div className="flex flex-col">
         <div className="flex items-center gap-1.5">
-          <span className={`font-black tracking-tight bg-gradient-to-r from-white via-violet-200 to-fuchsia-300 bg-clip-text text-transparent ${titleSizes[size] || titleSizes.md}`}>
-            Pulse<span className="text-violet-400">Chat</span>
+          <span className={`font-black tracking-tight text-white ${titleSizes[size] || titleSizes.md}`}>
+            Pulse<span className="text-blue-500">Chat</span>
           </span>
           {showTag && (
-            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-violet-500/20 text-violet-300 border border-violet-500/30">
-              Nexus
+            <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold tracking-wider uppercase bg-blue-500/15 text-blue-400 border border-blue-500/25">
+              Live
             </span>
           )}
         </div>
-        <span className="text-[10px] text-gray-400 font-medium tracking-wide -mt-0.5">
-          Realtime Voice • Video • Neural
+        <span className="text-[10px] text-slate-400 font-medium tracking-wide -mt-0.5">
+          Realtime Messaging & HD Calling
         </span>
       </div>
     </div>

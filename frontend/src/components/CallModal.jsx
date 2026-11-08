@@ -762,20 +762,19 @@ export default function CallModal({
   // ========================================================
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-xl animate-fade-in font-sans select-none">
-      {/* Background glow effects */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-violet-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-600/20 rounded-full blur-[120px] pointer-events-none"></div>
+      {/* Natural subtle ambient light */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(59,130,246,0.1),rgba(255,255,255,0))] pointer-events-none"></div>
 
       {/* ==================================================== */}
       {/* 1. OUTGOING & INCOMING CALL SCREEN */}
       {/* ==================================================== */}
       {(callState === "outgoing" || callState === "incoming") && (
-        <div className="relative w-full max-w-sm mx-4 bg-[#111622]/95 border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col items-center text-center">
+        <div className="relative w-full max-w-sm mx-4 bg-[#0e1320] border border-slate-800 rounded-2xl p-8 shadow-2xl flex flex-col items-center text-center">
           {/* Minimize button for outgoing calls */}
           {callState === "outgoing" && (
             <button
               onClick={() => setMinimizedState(true)}
-              className="absolute top-4 right-4 p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition"
+              className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
               title="Minimize to floating card"
             >
               <IconMinimize className="w-5 h-5" />
@@ -784,27 +783,27 @@ export default function CallModal({
 
           {/* Avatar with pulsing rings */}
           <div className="relative my-6">
-            <div className="absolute -inset-4 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-500 rounded-full opacity-60 animate-ping"></div>
-            <div className="absolute -inset-2 bg-violet-600/40 rounded-full animate-pulse"></div>
+            <div className="absolute -inset-3 bg-blue-500/20 rounded-full animate-ping"></div>
+            <div className="absolute -inset-1.5 bg-blue-500/30 rounded-full animate-pulse"></div>
             <img
               src={
                 activeContact?.avatar ||
                 `https://api.dicebear.com/7.x/bottts/svg?seed=${activeContact?.username || "user"}`
               }
               alt={activeContact?.name || "User"}
-              className="relative w-28 h-28 rounded-full object-cover border-4 border-white/20 shadow-xl"
+              className="relative w-28 h-28 rounded-full object-cover border-4 border-slate-700 shadow-xl"
             />
           </div>
 
           <h3 className="text-2xl font-bold text-white mb-1">
             {activeContact?.name || activeContact?.username || "User"}
           </h3>
-          <p className="text-sm text-violet-300 font-medium mb-2">
+          <p className="text-sm text-blue-400 font-medium mb-2">
             @{activeContact?.username || "user"}
           </p>
 
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold text-gray-300 mb-8">
-            {callType === "video" ? <IconVideo className="w-4 h-4 text-cyan-400" /> : <IconPhone className="w-4 h-4 text-emerald-400" />}
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs font-semibold text-slate-300 mb-8">
+            {callType === "video" ? <IconVideo className="w-4 h-4 text-blue-400" /> : <IconPhone className="w-4 h-4 text-emerald-400" />}
             <span>
               {callState === "incoming"
                 ? `Incoming ${callType === "video" ? "Video" : "Voice"} Call...`
@@ -913,29 +912,29 @@ export default function CallModal({
               <div className="flex flex-col items-center justify-center z-10 text-center px-4">
                 <div className="relative mb-6">
                   {/* Dynamic pulsing wave rings */}
-                  <div className="absolute -inset-8 rounded-full border border-violet-500/20 animate-ping"></div>
-                  <div className="absolute -inset-4 rounded-full border border-cyan-500/30 animate-pulse"></div>
+                  <div className="absolute -inset-8 rounded-full border border-blue-500/20 animate-ping"></div>
+                  <div className="absolute -inset-4 rounded-full border border-blue-500/30 animate-pulse"></div>
                   <img
                     src={
                       activeContact?.avatar ||
                       `https://api.dicebear.com/7.x/bottts/svg?seed=${activeContact?.username || "user"}`
                     }
                     alt="Active"
-                    className="relative w-32 h-32 rounded-full border-4 border-violet-500/50 shadow-2xl object-cover"
+                    className="relative w-32 h-32 rounded-full border-4 border-slate-700 shadow-2xl object-cover"
                   />
                 </div>
 
                 <h3 className="text-2xl font-bold text-white mb-2">
                   {activeContact?.name || activeContact?.username}
                 </h3>
-                <p className="text-sm text-gray-400 mb-6">Voice Connected</p>
+                <p className="text-sm text-slate-400 mb-6">Voice Connected</p>
 
                 {/* Animated sound wave bars */}
                 <div className="flex items-center gap-1.5 h-10">
                   {[20, 40, 60, 80, 50, 90, 70, 30, 80, 50, 30].map((h, i) => (
                     <div
                       key={i}
-                      className="w-1.5 bg-gradient-to-t from-violet-500 to-cyan-400 rounded-full animate-pulse"
+                      className="w-1.5 bg-gradient-to-t from-blue-600 to-sky-400 rounded-full animate-pulse"
                       style={{
                         height: `${h}%`,
                         animationDelay: `${i * 0.1}s`,

@@ -129,15 +129,15 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[230] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in font-sans select-none">
-      <div className="relative w-full max-w-lg bg-[#0e1322]/95 border border-white/10 rounded-3xl p-6 sm:p-7 shadow-2xl overflow-hidden text-white flex flex-col max-h-[92vh]">
-        {/* Glow ambient orbs */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-violet-600/25 rounded-full blur-[100px] pointer-events-none"></div>
+    <div className="fixed inset-0 z-[230] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in font-sans select-none">
+      <div className="relative w-full max-w-lg bg-[#0e1320] border border-slate-800 rounded-2xl p-6 sm:p-7 shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[92vh]">
+        {/* Subtle ambient light */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-600/10 rounded-full blur-[90px] pointer-events-none"></div>
 
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition z-10"
+          className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition z-10"
         >
           <IconClose className="w-5 h-5" />
         </button>
@@ -151,17 +151,16 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
           {/* Avatar Preview with Camera Overlay */}
           <div className="flex flex-col items-center">
             <div className="relative group">
-              <div className="absolute -inset-1.5 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 rounded-full blur-md opacity-70 group-hover:opacity-100 transition duration-300"></div>
               <img
                 src={avatarPreview}
                 alt="Avatar Preview"
-                className="relative w-28 h-28 rounded-full object-cover border-4 border-[#0e1322] shadow-2xl"
+                className="relative w-28 h-28 rounded-full object-cover border-4 border-slate-700 shadow-xl"
               />
 
               {/* Upload trigger label */}
               <label
                 htmlFor="myAvatarUploadInput"
-                className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-violet-600 hover:bg-violet-500 text-white flex items-center justify-center cursor-pointer shadow-lg border-2 border-[#0e1322] transition transform hover:scale-110 active:scale-95"
+                className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center cursor-pointer shadow-lg border-2 border-[#0e1320] transition transform hover:scale-110 active:scale-95"
                 title="Upload Photo from Device"
               >
                 <IconCamera className="w-4 h-4" />
@@ -178,18 +177,18 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
             <div className="flex items-center gap-2 mt-3">
               <label
                 htmlFor="myAvatarUploadInput"
-                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white cursor-pointer transition flex items-center gap-1.5"
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-xs font-semibold text-slate-200 cursor-pointer transition flex items-center gap-1.5"
               >
-                <IconCamera className="w-3.5 h-3.5 text-violet-400" />
+                <IconCamera className="w-3.5 h-3.5 text-blue-400" />
                 <span>Upload Photo</span>
               </label>
 
               <button
                 type="button"
                 onClick={handleRandomizeAvatar}
-                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-gray-300 hover:text-white border border-white/10 transition flex items-center gap-1.5"
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-xs font-semibold text-slate-300 hover:text-white border border-slate-700/60 transition flex items-center gap-1.5"
               >
-                <IconSparkles className="w-3.5 h-3.5 text-cyan-400" />
+                <IconSparkles className="w-3.5 h-3.5 text-blue-400" />
                 <span>Randomize</span>
               </button>
             </div>
@@ -197,7 +196,7 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
 
           {/* Preset Avatars Selection */}
           <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 text-center">
+            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">
               Or Choose a 3D Avatar Preset
             </label>
             <div className="grid grid-cols-4 gap-2">
@@ -208,19 +207,19 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
                     key={idx}
                     type="button"
                     onClick={() => handleSelectPreset(preset)}
-                    className={`relative p-1 rounded-2xl border transition overflow-hidden group ${
+                    className={`relative p-1 rounded-xl border transition overflow-hidden group ${
                       isSelected
-                        ? "border-violet-500 bg-violet-600/20 ring-2 ring-violet-500/50"
-                        : "border-white/10 bg-white/[0.03] hover:border-white/30"
+                        ? "border-blue-500 bg-blue-600/20 ring-2 ring-blue-500/50"
+                        : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
                     }`}
                   >
                     <img
                       src={preset}
                       alt={`Preset ${idx + 1}`}
-                      className="w-full h-12 rounded-xl object-cover group-hover:scale-110 transition duration-200"
+                      className="w-full h-12 rounded-lg object-cover group-hover:scale-105 transition duration-200"
                     />
                     {isSelected && (
-                      <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-violet-500 rounded-full flex items-center justify-center text-[9px] text-white font-bold">
+                      <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-blue-600 rounded-full flex items-center justify-center text-[9px] text-white font-bold">
                         ✓
                       </span>
                     )}
@@ -233,7 +232,7 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
           {/* Form Fields */}
           <form onSubmit={handleSave} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
                 Display Name
               </label>
               <input
@@ -241,24 +240,24 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your full name"
-                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 text-sm transition"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/60 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm transition"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
                 Username
               </label>
               <input
                 type="text"
                 disabled
                 value={`@${userData?.username || ""}`}
-                className="w-full px-4 py-3 rounded-xl bg-white/[0.02] border border-white/5 text-gray-500 text-sm cursor-not-allowed font-mono"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-800/20 border border-slate-800 text-slate-500 text-sm cursor-not-allowed font-mono"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
                 About / Status Bio
               </label>
               <textarea
@@ -266,14 +265,14 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
                 value={about}
                 onChange={(e) => setAbout(e.target.value)}
                 placeholder="Hey there! I am using PulseChat."
-                className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 text-sm transition resize-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/60 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm transition resize-none"
               />
             </div>
 
             {/* Blocked Contacts Management Section */}
             {blockedList && blockedList.length > 0 && (
-              <div className="pt-2 border-t border-white/[0.08]">
-                <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <div className="pt-2 border-t border-slate-800">
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <IconBan className="w-3.5 h-3.5 text-red-400" />
                   <span>Blocked Contacts ({blockedList.length})</span>
                 </label>
@@ -285,7 +284,7 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
                     return (
                       <div
                         key={bId}
-                        className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]"
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/40"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <img
@@ -294,11 +293,11 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
                               `https://api.dicebear.com/7.x/bottts/svg?seed=${bUsername}`
                             }
                             alt="Avatar"
-                            className="w-8 h-8 rounded-full object-cover border border-white/10"
+                            className="w-8 h-8 rounded-full object-cover border border-slate-700/60"
                           />
                           <div className="truncate">
                             <p className="text-xs font-semibold text-white truncate">{bName}</p>
-                            <span className="text-[10px] text-gray-400">@{bUsername}</span>
+                            <span className="text-[10px] text-slate-400">@{bUsername}</span>
                           </div>
                         </div>
 
@@ -327,7 +326,7 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-bold transition"
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
               >
                 Cancel
               </button>
@@ -335,10 +334,10 @@ export default function MyProfileModal({ onClose, onAvatarUpdated }) {
               <button
                 type="submit"
                 disabled={saving}
-                className={`flex-1 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition transform hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition transform hover:scale-[1.02] active:scale-[0.98] shadow-md flex items-center justify-center gap-2 ${
                   savedSuccess
                     ? "bg-emerald-600 text-white shadow-emerald-600/30"
-                    : "bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 text-white shadow-violet-600/30 hover:opacity-95"
+                    : "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/25"
                 }`}
               >
                 {saving ? (

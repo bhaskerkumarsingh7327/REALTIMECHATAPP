@@ -137,40 +137,38 @@ export default function Profile() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#070a12] px-4 py-8 select-none font-sans relative overflow-hidden">
-      {/* Dynamic Background Glow Orbs */}
-      <div className="absolute top-1/4 -left-32 w-96 h-96 bg-violet-600/20 rounded-full blur-[160px] pointer-events-none"></div>
-      <div className="absolute bottom-1/4 -right-32 w-96 h-96 bg-cyan-600/20 rounded-full blur-[160px] pointer-events-none"></div>
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0d14] px-4 py-8 select-none font-sans relative overflow-hidden">
+      {/* Natural ambient subtle light */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(59,130,246,0.08),rgba(255,255,255,0))] pointer-events-none"></div>
 
       <div className="w-full max-w-lg z-10">
         {/* Back Button */}
         <button
           onClick={() => navigate("/")}
-          className="flex items-center gap-2 text-xs font-semibold text-gray-400 hover:text-white mb-5 transition px-2 py-1 rounded-lg hover:bg-white/5 w-fit"
+          className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white mb-5 transition px-2.5 py-1.5 rounded-lg hover:bg-slate-800/60 w-fit"
         >
           ← Back to chats
         </button>
 
-        <div className="bg-[#0e1322]/90 border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-2xl">
-          <h2 className="text-2xl font-extrabold text-white mb-2 text-center tracking-tight">
+        <div className="bg-[#0e1320] border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-1.5 text-center tracking-tight">
             Account & Profile Settings
           </h2>
-          <p className="text-xs text-gray-400 text-center mb-6">
+          <p className="text-xs text-slate-400 text-center mb-6">
             Customize your avatar, display name, status bio, and manage blocked contacts
           </p>
 
           {/* Avatar Preview with Camera Overlay */}
           <div className="flex flex-col items-center mb-6">
             <div className="relative group">
-              <div className="absolute -inset-2 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 rounded-full blur-md opacity-70 group-hover:opacity-100 transition duration-300"></div>
               <img
                 src={avatarPreview}
                 alt="Avatar"
-                className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full object-cover border-4 border-[#0e1322] shadow-2xl"
+                className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full object-cover border-4 border-slate-700 shadow-xl"
               />
               <label
                 htmlFor="avatarUploadInput"
-                className="absolute bottom-0 right-0 w-10 h-10 rounded-full bg-violet-600 hover:bg-violet-500 text-white flex items-center justify-center cursor-pointer shadow-lg border-2 border-[#0e1322] transition transform hover:scale-110 active:scale-95"
+                className="absolute bottom-0 right-0 w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center cursor-pointer shadow-lg border-2 border-[#0e1320] transition transform hover:scale-110 active:scale-95"
                 title="Change Photo from Device"
               >
                 <IconCamera className="w-5 h-5" />
@@ -188,18 +186,18 @@ export default function Profile() {
             <div className="flex items-center gap-2 mt-4">
               <label
                 htmlFor="avatarUploadInput"
-                className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white cursor-pointer transition flex items-center gap-1.5 shadow-sm"
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-xs font-semibold text-slate-200 cursor-pointer transition flex items-center gap-1.5 shadow-sm"
               >
-                <IconCamera className="w-3.5 h-3.5 text-violet-400" />
+                <IconCamera className="w-3.5 h-3.5 text-blue-400" />
                 <span>Upload Custom Photo</span>
               </label>
 
               <button
                 type="button"
                 onClick={handleRandomizeAvatar}
-                className="px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-gray-300 hover:text-white border border-white/10 transition flex items-center gap-1.5 shadow-sm"
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-xs font-semibold text-slate-300 hover:text-white border border-slate-700/60 transition flex items-center gap-1.5 shadow-sm"
               >
-                <IconSparkles className="w-3.5 h-3.5 text-cyan-400" />
+                <IconSparkles className="w-3.5 h-3.5 text-blue-400" />
                 <span>Randomize 3D</span>
               </button>
             </div>
@@ -207,7 +205,7 @@ export default function Profile() {
 
           {/* Preset Avatars Selection */}
           <div className="mb-6">
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2.5 text-center">
+            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 text-center">
               Quick 3D Avatar Presets
             </label>
             <div className="grid grid-cols-4 gap-2">
@@ -218,19 +216,19 @@ export default function Profile() {
                     key={idx}
                     type="button"
                     onClick={() => handleSelectPreset(preset)}
-                    className={`relative p-1 rounded-2xl border transition overflow-hidden group ${
+                    className={`relative p-1 rounded-xl border transition overflow-hidden group ${
                       isSelected
-                        ? "border-violet-500 bg-violet-600/20 ring-2 ring-violet-500/50"
-                        : "border-white/10 bg-white/[0.03] hover:border-white/30"
+                        ? "border-blue-500 bg-blue-600/20 ring-2 ring-blue-500/50"
+                        : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
                     }`}
                   >
                     <img
                       src={preset}
                       alt={`Preset ${idx + 1}`}
-                      className="w-full h-12 rounded-xl object-cover group-hover:scale-110 transition duration-200"
+                      className="w-full h-12 rounded-lg object-cover group-hover:scale-105 transition duration-200"
                     />
                     {isSelected && (
-                      <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-violet-500 rounded-full flex items-center justify-center text-[9px] text-white font-bold">
+                      <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-blue-600 rounded-full flex items-center justify-center text-[9px] text-white font-bold">
                         ✓
                       </span>
                     )}
@@ -243,7 +241,7 @@ export default function Profile() {
           {/* Profile Form */}
           <form onSubmit={handleSaveProfile} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
                 Full Display Name
               </label>
               <input
@@ -251,27 +249,27 @@ export default function Profile() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your full name"
-                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 text-sm transition"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/60 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm transition"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
                 Username
               </label>
               <input
                 type="text"
                 disabled
                 value={`@${userData?.username || ""}`}
-                className="w-full px-4 py-3 rounded-xl bg-white/[0.02] border border-white/5 text-gray-500 text-sm cursor-not-allowed font-mono"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-800/20 border border-slate-800 text-slate-500 text-sm cursor-not-allowed font-mono"
               />
-              <span className="text-[10px] text-gray-500 mt-1 block">
+              <span className="text-[10px] text-slate-500 mt-1 block">
                 Username is permanent and unique across PulseChat
               </span>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
                 About / Bio Status
               </label>
               <textarea
@@ -279,14 +277,14 @@ export default function Profile() {
                 value={about}
                 onChange={(e) => setAbout(e.target.value)}
                 placeholder="Available, Coding, Busy..."
-                className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 text-sm transition resize-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/60 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm transition resize-none"
               />
             </div>
 
             {/* Blocked Users Section */}
             {blockedList && blockedList.length > 0 && (
-              <div className="pt-3 border-t border-white/[0.08]">
-                <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <div className="pt-3 border-t border-slate-800">
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <IconBan className="w-3.5 h-3.5 text-red-400" />
                   <span>Blocked Contacts ({blockedList.length})</span>
                 </label>
@@ -298,7 +296,7 @@ export default function Profile() {
                     return (
                       <div
                         key={bId}
-                        className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]"
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/40"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <img
@@ -307,11 +305,11 @@ export default function Profile() {
                               `https://api.dicebear.com/7.x/bottts/svg?seed=${bUsername}`
                             }
                             alt="Avatar"
-                            className="w-8 h-8 rounded-full object-cover border border-white/10"
+                            className="w-8 h-8 rounded-full object-cover border border-slate-700/60"
                           />
                           <div className="truncate">
                             <p className="text-xs font-semibold text-white truncate">{bName}</p>
-                            <span className="text-[10px] text-gray-400">@{bUsername}</span>
+                            <span className="text-[10px] text-slate-400">@{bUsername}</span>
                           </div>
                         </div>
 
@@ -338,10 +336,10 @@ export default function Profile() {
             <button
               type="submit"
               disabled={saving}
-              className={`w-full py-3.5 rounded-xl font-bold text-sm shadow-xl transition transform hover:scale-[1.02] active:scale-[0.98] mt-2 flex items-center justify-center gap-2 ${
+              className={`w-full py-3 rounded-xl font-semibold text-sm shadow-md transition transform hover:scale-[1.01] active:scale-[0.99] mt-2 flex items-center justify-center gap-2 ${
                 savedSuccess
                   ? "bg-emerald-600 text-white shadow-emerald-600/30"
-                  : "bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 text-white shadow-violet-600/30"
+                  : "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/25"
               }`}
             >
               {saving ? (
