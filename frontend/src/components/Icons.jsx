@@ -211,3 +211,21 @@ export const IconPin = ({ className = "w-4 h-4", ...props }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 4l4 4-2 2-1-1-4 4 1 1-2 2-6-6 2-2 1 1 4-4-1-1 2-2zM5 19l4-4" />
   </svg>
 );
+
+export const IconDotsVertical = ({ className = "w-5 h-5", ...props }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+  </svg>
+);
+
+export const IconBell = ({ className = "w-5 h-5", ...props }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+  </svg>
+);
+
+export const IconBellOff = ({ className = "w-5 h-5", ...props }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.73 21a2 2 0 01-3.46 0M18.63 13A17.89 17.89 0 0118 11V9a6 6 0 00-4-5.659V3a2 2 0 10-4 0v.341C7.67 4.165 6 6.388 6 9v2c0 .67-.09 1.33-.27 1.96M3 3l18 18M9.5 17h8.5l-1.405-1.405" />
+  </svg>
+);

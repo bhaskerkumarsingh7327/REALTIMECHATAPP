@@ -41,6 +41,7 @@ export default function UserProfileModal({
   isOnline,
   chatMessages = [],
   isBlocked = false,
+  initialTab = "photos",
   onClose,
   onStartAudioCall,
   onStartVideoCall,
@@ -49,7 +50,7 @@ export default function UserProfileModal({
   onDeleteChat,
   onPreviewImage,
 }) {
-  const [activeMediaTab, setActiveMediaTab] = useState("photos");
+  const [activeMediaTab, setActiveMediaTab] = useState(initialTab || "photos");
   const [playingAudioUrl, setPlayingAudioUrl] = useState(null);
   const [audioEl, setAudioEl] = useState(null);
 

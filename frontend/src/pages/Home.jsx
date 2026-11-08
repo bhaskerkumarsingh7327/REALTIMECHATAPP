@@ -34,9 +34,33 @@ import {
   IconCopy,
   IconBan,
   IconCamera,
+  IconDotsVertical,
+  IconBell,
+  IconBellOff,
 } from "../components/Icons";
 import { sounds } from "../utils/soundEffects";
 import { PULSE_AI_USER, generateAIResponse } from "../utils/aiBot";
+
+// Helper for highlighting in-chat search query matches
+function renderHighlightedText(text, query) {
+  if (!query || !query.trim() || !text) return text;
+  try {
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(${escaped})`, "gi");
+    const parts = text.split(regex);
+    return parts.map((part, i) =>
+      regex.test(part) ? (
+        <mark key={i} className="bg-amber-300 text-slate-900 rounded-xs px-0.5">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  } catch {
+    return text;
+  }
+}
 
 // Helper for relative time formatting (e.g., "just now", "1 min ago", "5 mins ago", "1 hour ago", "2 hours ago", "yesterday")
 function formatRelativeTime(dateInput) {
@@ -90,6 +114,64 @@ export default function Home() {
   const [previewImage, setPreviewImage] = useState(null);
   const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
   const [copiedMsgId, setCopiedMsgId] = useState(null);
+
+  // WhatsApp-style 3-Dot Menu & In-Chat Search State
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  const [profileModalTab, setProfileModalTab] = useState("photos");
+  const [searchInChatOpen, setSearchInChatOpen] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const [mutedChats, setMutedChats] = useState(() => {
+    try {
+      const saved = localStorage.getItem("pulse_muted_chats");
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const chatMenuRef = useRef(null);
+  const mutedChatsRef = useRef(mutedChats);
+  useEffect(() => {
+    mutedChatsRef.current = mutedChats;
+  }, [mutedChats]);
+
+  // Click outside to close 3-dot dropdown menu
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (chatMenuRef.current && !chatMenuRef.current.contains(e.target)) {
+        setShowChatMenu(false);
+      }
+    };
+    if (showChatMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showChatMenu]);
+
+  // Reset menu & in-chat search when active chat changes
+  useEffect(() => {
+    setShowChatMenu(false);
+    setSearchInChatOpen(false);
+    setChatSearchQuery("");
+  }, [selectedChat?._id]);
+
+  const handleToggleMuteChat = (chatId) => {
+    if (!chatId) return;
+    setMutedChats((prev) => {
+      const next = new Set(prev);
+      if (next.has(chatId)) {
+        next.delete(chatId);
+      } else {
+        next.add(chatId);
+      }
+      try {
+        localStorage.setItem("pulse_muted_chats", JSON.stringify([...next]));
+      } catch (e) {}
+      return next;
+    });
+  };
 
   // WebRTC Calling State
   const [callState, setCallState] = useState("idle"); // 'idle' | 'outgoing' | 'incoming' | 'in-call'
@@ -219,7 +301,9 @@ export default function Home() {
     socket.on("receive-message", ({ chatId, message }) => {
       console.log("[SOCKET] Received message in chat:", chatId, message);
       if (message.sender !== userData.username) {
-        sounds.playMessageReceived();
+        if (!mutedChatsRef.current.has(chatId)) {
+          sounds.playMessageReceived();
+        }
       }
 
       setChats((prev) => {
@@ -1037,6 +1121,13 @@ export default function Home() {
     return -1;
   }, [selectedChat?.messages, userData?.username, userData?._id]);
 
+  // Count matching messages for in-chat search
+  const matchingChatMessagesCount = useMemo(() => {
+    if (!chatSearchQuery.trim() || !selectedChat?.messages) return 0;
+    const q = chatSearchQuery.toLowerCase();
+    return selectedChat.messages.filter((m) => m.text && m.text.toLowerCase().includes(q)).length;
+  }, [chatSearchQuery, selectedChat?.messages]);
+
   return (
     <div className="fixed inset-0 flex h-[100dvh] w-full bg-[#f8fafc] text-slate-800 overflow-hidden font-sans select-none">
       {/* Subtle ambient light */}
@@ -1297,6 +1388,11 @@ export default function Home() {
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-sm md:text-base text-slate-900 truncate group-hover:text-blue-600 transition flex items-center gap-1.5">
                       <span>{currentPartner?.name || currentPartner?.username}</span>
+                      {mutedChats.has(selectedChat._id) && (
+                        <span title="Notifications muted">
+                          <IconBellOff className="w-3.5 h-3.5 text-slate-400" />
+                        </span>
+                      )}
                       {isContactBlockedByMe && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-bold border border-red-200">
                           Blocked
@@ -1334,7 +1430,7 @@ export default function Home() {
               </div>
 
               {/* Header Action Buttons */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 relative">
                 {!selectedChat.isAIChat && (
                   <>
                     <button
@@ -1362,26 +1458,189 @@ export default function Home() {
                     >
                       <IconVideo className="w-4 h-4" />
                     </button>
-
-                    <button
-                      onClick={() => setShowProfileModal(true)}
-                      className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80 border border-slate-200 transition shadow-xs"
-                      title="Contact Profile & Shared Media"
-                    >
-                      <IconInfo className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={handleDeleteChat}
-                      className="p-2 rounded-xl bg-slate-100 text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 hover:border-red-200 transition"
-                      title="Delete Conversation"
-                    >
-                      <IconTrash className="w-4 h-4" />
-                    </button>
                   </>
                 )}
+
+                {/* 3-Dot More Options Dropdown Menu (WhatsApp-style) */}
+                <div className="relative" ref={chatMenuRef}>
+                  <button
+                    onClick={() => setShowChatMenu((prev) => !prev)}
+                    className={`p-2 rounded-xl border transition shadow-xs ${
+                      showChatMenu
+                        ? "bg-blue-50 text-blue-600 border-blue-200 ring-2 ring-blue-100"
+                        : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80 border-slate-200"
+                    }`}
+                    title="More options"
+                  >
+                    <IconDotsVertical className="w-4 h-4" />
+                  </button>
+
+                  {/* Dropdown Popover */}
+                  {showChatMenu && (
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200/90 rounded-2xl shadow-xl py-1.5 z-50 animate-fade-in text-xs font-medium text-slate-700">
+                      {!selectedChat.isAIChat ? (
+                        <>
+                          {/* 1. Contact info */}
+                          <button
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              setProfileModalTab("photos");
+                              setShowProfileModal(true);
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                          >
+                            <IconUser className="w-4 h-4 text-slate-500" />
+                            <span>Contact info</span>
+                          </button>
+
+                          {/* 2. Media, links, and docs */}
+                          <button
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              setProfileModalTab("photos");
+                              setShowProfileModal(true);
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                          >
+                            <IconCamera className="w-4 h-4 text-slate-500" />
+                            <span>Media, links and docs</span>
+                          </button>
+
+                          {/* 3. Search in chat */}
+                          <button
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              setSearchInChatOpen((prev) => !prev);
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                          >
+                            <IconSearch className="w-4 h-4 text-slate-500" />
+                            <span>Search in conversation</span>
+                          </button>
+
+                          {/* 4. Mute notifications */}
+                          <button
+                            onClick={() => {
+                              handleToggleMuteChat(selectedChat._id);
+                              setShowChatMenu(false);
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                          >
+                            {mutedChats.has(selectedChat._id) ? (
+                              <>
+                                <IconBell className="w-4 h-4 text-slate-500" />
+                                <span>Unmute notifications</span>
+                              </>
+                            ) : (
+                              <>
+                                <IconBellOff className="w-4 h-4 text-slate-500" />
+                                <span>Mute notifications</span>
+                              </>
+                            )}
+                          </button>
+
+                          <div className="my-1 border-t border-slate-100"></div>
+
+                          {/* 5. Clear chat */}
+                          <button
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              if (window.confirm("Are you sure you want to clear all messages in this chat?")) {
+                                handleClearChatHistory();
+                              }
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                          >
+                            <IconTrash className="w-4 h-4 text-slate-400" />
+                            <span>Clear chat history</span>
+                          </button>
+
+                          {/* 6. Block / Unblock contact */}
+                          <button
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              handleToggleBlockContact();
+                            }}
+                            className={`w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition ${
+                              isContactBlockedByMe ? "text-emerald-600 font-semibold" : "text-slate-700"
+                            }`}
+                          >
+                            <IconBan className={`w-4 h-4 ${isContactBlockedByMe ? "text-emerald-600" : "text-red-500"}`} />
+                            <span>{isContactBlockedByMe ? "Unblock contact" : "Block contact"}</span>
+                          </button>
+
+                          {/* 7. Delete chat */}
+                          <button
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              handleDeleteChat();
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-red-50 flex items-center gap-2.5 transition text-red-600 font-medium"
+                          >
+                            <IconTrash className="w-4 h-4 text-red-500" />
+                            <span>Delete conversation</span>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              setSearchInChatOpen((prev) => !prev);
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                          >
+                            <IconSearch className="w-4 h-4 text-slate-500" />
+                            <span>Search in conversation</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              handleClearChatHistory();
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                          >
+                            <IconTrash className="w-4 h-4 text-slate-400" />
+                            <span>Clear conversation</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+
+            {/* IN-CHAT MESSAGE SEARCH BAR (WhatsApp-style) */}
+            {searchInChatOpen && (
+              <div className="bg-white border-b border-slate-200/90 px-4 py-2 flex items-center gap-3 backdrop-blur-md shadow-xs z-20 animate-fade-in">
+                <IconSearch className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search in conversation..."
+                  value={chatSearchQuery}
+                  onChange={(e) => setChatSearchQuery(e.target.value)}
+                  autoFocus
+                  className="flex-1 bg-slate-100/90 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white transition"
+                />
+                {chatSearchQuery && (
+                  <span className="text-[11px] font-semibold text-slate-500 font-mono">
+                    {matchingChatMessagesCount} {matchingChatMessagesCount === 1 ? "match" : "matches"}
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    setSearchInChatOpen(false);
+                    setChatSearchQuery("");
+                  }}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                  title="Close search"
+                >
+                  <IconClose className="w-4 h-4" />
+                </button>
+              </div>
+            )}
 
             {/* BLOCKED CONTACT WARNING BANNER WITH INSTANT UNBLOCK */}
             {isContactBlockedByMe && (
@@ -1520,7 +1779,9 @@ export default function Home() {
                       {/* Text Content */}
                       {msg.text && msg.mediaType !== "audio" && (
                         <p className="text-sm leading-relaxed whitespace-pre-wrap break-words select-text">
-                          {msg.text}
+                          {chatSearchQuery
+                            ? renderHighlightedText(msg.text, chatSearchQuery)
+                            : msg.text}
                         </p>
                       )}
 
@@ -1802,6 +2063,7 @@ export default function Home() {
           isOnline={isPartnerOnline}
           chatMessages={selectedChat?.messages || []}
           isBlocked={isContactBlockedByMe}
+          initialTab={profileModalTab}
           onClose={() => setShowProfileModal(false)}
           onStartAudioCall={() => startCall("audio")}
           onStartVideoCall={() => startCall("video")}
