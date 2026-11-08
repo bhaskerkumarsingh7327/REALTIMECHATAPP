@@ -35,16 +35,16 @@ export default function Logo({ size = "md", showTag = true, className = "" }) {
       {/* Brand Text */}
       <div className="flex flex-col">
         <div className="flex items-center gap-1.5">
-          <span className={`font-black tracking-tight text-white ${titleSizes[size] || titleSizes.md}`}>
-            Pulse<span className="text-blue-500">Chat</span>
+          <span className={`font-black tracking-tight text-slate-900 ${titleSizes[size] || titleSizes.md}`}>
+            Pulse<span className="text-blue-600">Chat</span>
           </span>
           {showTag && (
-            <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold tracking-wider uppercase bg-blue-500/15 text-blue-400 border border-blue-500/25">
+            <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold tracking-wider uppercase bg-blue-50 text-blue-600 border border-blue-200">
               Live
             </span>
           )}
         </div>
-        <span className="text-[10px] text-slate-400 font-medium tracking-wide -mt-0.5">
+        <span className="text-[10px] text-slate-500 font-medium tracking-wide -mt-0.5">
           Realtime Messaging & HD Calling
         </span>
       </div>

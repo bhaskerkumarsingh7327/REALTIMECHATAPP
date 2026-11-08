@@ -87,11 +87,13 @@ export default function AudioMessage({ audioUrl, isSender }) {
       <div className="flex-1 flex flex-col justify-center">
         <div
           onClick={handleSeek}
-          className="relative h-2 bg-white/20 rounded-full cursor-pointer overflow-hidden my-1"
+          className={`relative h-2 rounded-full cursor-pointer overflow-hidden my-1 ${
+            isSender ? "bg-white/30" : "bg-slate-200"
+          }`}
         >
           <div
             className={`h-full rounded-full transition-all duration-100 ${
-              isSender ? "bg-white" : "bg-blue-500"
+              isSender ? "bg-white" : "bg-blue-600"
             }`}
             style={{ width: `${progress}%` }}
           ></div>

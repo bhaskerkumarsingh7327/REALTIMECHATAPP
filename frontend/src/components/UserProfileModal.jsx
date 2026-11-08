@@ -100,10 +100,10 @@ export default function UserProfileModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 animate-fade-in font-sans select-none">
-      <div className="relative w-full max-w-lg bg-[#0e1320] border border-slate-800 rounded-2xl p-5 sm:p-7 shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[92vh]">
-        {/* Top ambient glow */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-600/10 rounded-full blur-[90px] pointer-events-none"></div>
+    <div className="fixed inset-0 z-[220] flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-3 sm:p-4 animate-fade-in font-sans select-none">
+      <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-2xl p-5 sm:p-7 shadow-2xl overflow-hidden text-slate-800 flex flex-col max-h-[92vh]">
+        {/* Subtle decorative glow */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-500/5 rounded-full blur-[90px] pointer-events-none"></div>
 
         {/* Close Button */}
         <button
@@ -111,7 +111,7 @@ export default function UserProfileModal({
             if (audioEl) audioEl.pause();
             onClose();
           }}
-          className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition z-10"
+          className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition z-10"
         >
           <IconClose className="w-5 h-5" />
         </button>
@@ -127,38 +127,38 @@ export default function UserProfileModal({
                   `https://api.dicebear.com/7.x/bottts/svg?seed=${user.username || "user"}`
                 }
                 alt={user.name || user.username}
-                className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover border-2 border-slate-700 shadow-xl"
+                className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover border-2 border-slate-200 shadow-md"
               />
               {isOnline ? (
-                <span className="absolute bottom-1 right-1 w-4 h-4 bg-emerald-500 border-2 border-[#0e1320] rounded-full shadow-md animate-pulse"></span>
+                <span className="absolute bottom-1 right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full shadow-md animate-pulse"></span>
               ) : (
-                <span className="absolute bottom-1 right-1 w-4 h-4 bg-slate-600 border-2 border-[#0e1320] rounded-full"></span>
+                <span className="absolute bottom-1 right-1 w-4 h-4 bg-slate-400 border-2 border-white rounded-full"></span>
               )}
             </div>
 
-            <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               {user.name || user.username}
             </h3>
-            <p className="text-xs text-blue-400 font-medium mt-0.5">@{user.username}</p>
+            <p className="text-xs text-blue-600 font-semibold mt-0.5">@{user.username}</p>
 
             {/* Status Beacon with Relative Last Seen */}
             <div className="mt-2.5 flex items-center gap-2">
               <div
                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
                   isBlocked
-                    ? "bg-red-500/10 text-red-400 border-red-500/20"
+                    ? "bg-red-50 text-red-600 border-red-200"
                     : isOnline
-                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                    : "bg-slate-800/60 text-slate-400 border-slate-700/50"
+                    ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                    : "bg-slate-100 text-slate-600 border-slate-200"
                 }`}
               >
                 <span
                   className={`w-2 h-2 rounded-full ${
                     isBlocked
-                      ? "bg-red-400"
+                      ? "bg-red-500"
                       : isOnline
-                      ? "bg-emerald-400 animate-pulse"
-                      : "bg-slate-500"
+                      ? "bg-emerald-500 animate-pulse"
+                      : "bg-slate-400"
                   }`}
                 ></span>
                 <span>
@@ -180,10 +180,10 @@ export default function UserProfileModal({
                 onClose();
                 if (onStartAudioCall) onStartAudioCall();
               }}
-              className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border transition font-semibold text-xs shadow-sm ${
+              className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border transition font-semibold text-xs shadow-xs ${
                 isBlocked
-                  ? "bg-slate-800/20 text-slate-600 border-slate-800/40 cursor-not-allowed"
-                  : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20 hover:scale-[1.02] active:scale-[0.98]"
+                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                  : "bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border-emerald-200 hover:scale-[1.02] active:scale-[0.98]"
               }`}
             >
               <IconPhone className="w-4 h-4" />
@@ -196,10 +196,10 @@ export default function UserProfileModal({
                 onClose();
                 if (onStartVideoCall) onStartVideoCall();
               }}
-              className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border transition font-semibold text-xs shadow-sm ${
+              className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border transition font-semibold text-xs shadow-xs ${
                 isBlocked
-                  ? "bg-slate-800/20 text-slate-600 border-slate-800/40 cursor-not-allowed"
-                  : "bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border-blue-500/20 hover:scale-[1.02] active:scale-[0.98]"
+                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                  : "bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200 hover:scale-[1.02] active:scale-[0.98]"
               }`}
             >
               <IconVideo className="w-4 h-4" />
@@ -208,23 +208,23 @@ export default function UserProfileModal({
           </div>
 
           {/* Bio / About & Email Card */}
-          <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 space-y-3">
+          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-3">
             <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1">
+              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
                 About / Bio
               </span>
-              <p className="text-xs text-slate-200 leading-relaxed select-text">
+              <p className="text-xs text-slate-700 leading-relaxed select-text">
                 {user.about || "Hey there! I am using PulseChat."}
               </p>
             </div>
 
             {user.email && (
-              <div className="pt-2 border-t border-slate-700/40 flex items-center justify-between">
+              <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <IconMail className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                  <span className="text-xs text-slate-300 truncate select-text">{user.email}</span>
+                  <IconMail className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                  <span className="text-xs text-slate-700 truncate select-text">{user.email}</span>
                 </div>
-                <span className="text-[10px] text-slate-500 font-mono">Verified</span>
+                <span className="text-[10px] text-emerald-600 font-semibold">Verified</span>
               </div>
             )}
           </div>
@@ -232,24 +232,24 @@ export default function UserProfileModal({
           {/* ========================================================= */}
           {/* SHARED MEDIA, AUDIO, DOCS & LINKS SECTION */}
           {/* ========================================================= */}
-          <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4">
+          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] uppercase font-bold text-slate-300 tracking-wider flex items-center gap-1.5">
+              <span className="text-[11px] uppercase font-bold text-slate-700 tracking-wider flex items-center gap-1.5">
                 <span>Shared Media</span>
-                <span className="px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 text-[10px] font-mono">
+                <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">
                   {totalMediaCount}
                 </span>
               </span>
             </div>
 
             {/* Media Filter Tabs */}
-            <div className="flex items-center gap-1.5 p-1 bg-slate-900/60 rounded-xl mb-3 text-xs">
+            <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-xl mb-3 text-xs">
               <button
                 onClick={() => setActiveMediaTab("photos")}
                 className={`flex-1 py-1.5 px-2 rounded-lg font-semibold transition ${
                   activeMediaTab === "photos"
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-white text-slate-900 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 Photos ({sharedImages.length})
@@ -259,8 +259,8 @@ export default function UserProfileModal({
                 onClick={() => setActiveMediaTab("voice")}
                 className={`flex-1 py-1.5 px-2 rounded-lg font-semibold transition ${
                   activeMediaTab === "voice"
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-white text-slate-900 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 Voice ({sharedAudio.length})
@@ -270,8 +270,8 @@ export default function UserProfileModal({
                 onClick={() => setActiveMediaTab("files")}
                 className={`flex-1 py-1.5 px-2 rounded-lg font-semibold transition ${
                   activeMediaTab === "files"
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-white text-slate-900 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 Docs ({sharedFiles.length})
@@ -281,8 +281,8 @@ export default function UserProfileModal({
                 onClick={() => setActiveMediaTab("links")}
                 className={`flex-1 py-1.5 px-2 rounded-lg font-semibold transition ${
                   activeMediaTab === "links"
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-white text-slate-900 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 Links ({sharedLinks.length})
@@ -298,7 +298,7 @@ export default function UserProfileModal({
                       <div
                         key={idx}
                         onClick={() => onPreviewImage && onPreviewImage(img.mediaUrl)}
-                        className="group relative h-20 rounded-xl overflow-hidden border border-slate-700/60 bg-slate-900/60 cursor-pointer"
+                        className="group relative h-20 rounded-xl overflow-hidden border border-slate-200 bg-white cursor-pointer shadow-2xs"
                         title="Click to view full photo"
                       >
                         <img
@@ -315,7 +315,7 @@ export default function UserProfileModal({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center py-6 text-slate-500 text-xs">No photos shared in this conversation yet.</p>
+                  <p className="text-center py-6 text-slate-400 text-xs">No photos shared in this conversation yet.</p>
                 )}
               </div>
             )}
@@ -329,17 +329,17 @@ export default function UserProfileModal({
                     return (
                       <div
                         key={idx}
-                        className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50"
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs"
                       >
                         <div className="flex items-center gap-3">
                           <button
                             onClick={() => handleTogglePlayAudio(aud.mediaUrl)}
-                            className="w-9 h-9 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition shadow-md"
+                            className="w-9 h-9 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition shadow-sm"
                           >
                             {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4 ml-0.5" />}
                           </button>
                           <div>
-                            <p className="text-xs font-semibold text-white">Voice Note</p>
+                            <p className="text-xs font-semibold text-slate-900">Voice Note</p>
                             <span className="text-[10px] text-slate-400 font-mono">
                               {aud.createdAt ? new Date(aud.createdAt).toLocaleDateString([], { month: "short", day: "numeric" }) : ""}
                             </span>
@@ -349,7 +349,7 @@ export default function UserProfileModal({
                         <a
                           href={aud.mediaUrl}
                           download="voice-note.webm"
-                          className="text-xs text-blue-400 hover:text-blue-300 px-2.5 py-1 bg-blue-500/10 rounded-lg transition"
+                          className="text-xs text-blue-600 hover:text-blue-700 font-semibold px-2.5 py-1 bg-blue-50 rounded-lg transition"
                         >
                           Save
                         </a>
@@ -357,7 +357,7 @@ export default function UserProfileModal({
                     );
                   })
                 ) : (
-                  <p className="text-center py-6 text-slate-500 text-xs">No voice notes shared yet.</p>
+                  <p className="text-center py-6 text-slate-400 text-xs">No voice notes shared yet.</p>
                 )}
               </div>
             )}
@@ -372,12 +372,12 @@ export default function UserProfileModal({
                       href={f.mediaUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800/90 border border-slate-700/50 transition"
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 transition shadow-2xs"
                     >
                       <div className="flex items-center gap-2.5 truncate">
-                        <IconFileText className="w-5 h-5 text-blue-400 flex-shrink-0" />
+                        <IconFileText className="w-5 h-5 text-blue-600 flex-shrink-0" />
                         <div className="truncate">
-                          <p className="text-xs font-semibold text-white truncate">{f.fileName || f.text || "File"}</p>
+                          <p className="text-xs font-semibold text-slate-900 truncate">{f.fileName || f.text || "File"}</p>
                           <span className="text-[10px] text-slate-400">{f.fileSize || "Attachment"}</span>
                         </div>
                       </div>
@@ -385,7 +385,7 @@ export default function UserProfileModal({
                     </a>
                   ))
                 ) : (
-                  <p className="text-center py-6 text-slate-500 text-xs">No documents or files shared yet.</p>
+                  <p className="text-center py-6 text-slate-400 text-xs">No documents or files shared yet.</p>
                 )}
               </div>
             )}
@@ -400,16 +400,16 @@ export default function UserProfileModal({
                       href={linkObj.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800/90 border border-slate-700/50 transition"
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 transition shadow-2xs"
                     >
                       <div className="flex items-center gap-2.5 truncate">
-                        <IconExternalLink className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                        <span className="text-xs text-blue-300 underline truncate">{linkObj.url}</span>
+                        <IconExternalLink className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                        <span className="text-xs text-blue-600 underline truncate">{linkObj.url}</span>
                       </div>
                     </a>
                   ))
                 ) : (
-                  <p className="text-center py-6 text-slate-500 text-xs">No links shared in this conversation yet.</p>
+                  <p className="text-center py-6 text-slate-400 text-xs">No links shared in this conversation yet.</p>
                 )}
               </div>
             )}
@@ -418,15 +418,15 @@ export default function UserProfileModal({
           {/* ========================================================= */}
           {/* USER ACTIONS: BLOCK / CLEAR / DELETE */}
           {/* ========================================================= */}
-          <div className="space-y-2 pt-1 border-t border-slate-800">
+          <div className="space-y-2 pt-1 border-t border-slate-200">
             {/* Block / Unblock Contact Button */}
             {onToggleBlock && (
               <button
                 onClick={onToggleBlock}
-                className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm ${
+                className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs ${
                   isBlocked
-                    ? "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                    : "bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
+                    ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200"
+                    : "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200"
                 }`}
               >
                 <IconBan className="w-4 h-4" />
@@ -442,9 +442,9 @@ export default function UserProfileModal({
                     onClearChat();
                   }
                 }}
-                className="w-full py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/80 border border-slate-700/50 transition flex items-center justify-center gap-2"
+                className="w-full py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition flex items-center justify-center gap-2"
               >
-                <IconTrash className="w-3.5 h-3.5 text-slate-400" />
+                <IconTrash className="w-3.5 h-3.5 text-slate-500" />
                 <span>Clear Messages</span>
               </button>
             )}
@@ -456,9 +456,9 @@ export default function UserProfileModal({
                   onClose();
                   onDeleteChat();
                 }}
-                className="w-full py-2.5 rounded-xl text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition flex items-center justify-center gap-2"
+                className="w-full py-2.5 rounded-xl text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200 transition flex items-center justify-center gap-2"
               >
-                <IconTrash className="w-3.5 h-3.5 text-red-400" />
+                <IconTrash className="w-3.5 h-3.5 text-red-600" />
                 <span>Delete Entire Conversation</span>
               </button>
             )}

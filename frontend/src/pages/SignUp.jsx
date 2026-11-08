@@ -60,25 +60,25 @@ export default function SignUp() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0d14] px-4 py-8 relative overflow-hidden select-none font-sans">
-      {/* Natural ambient subtle light */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(59,130,246,0.08),rgba(255,255,255,0))] pointer-events-none"></div>
+    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] px-4 py-8 relative overflow-hidden select-none font-sans">
+      {/* Soft ambient subtle light */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(59,130,246,0.07),rgba(255,255,255,0))] pointer-events-none"></div>
 
       <div className="w-full max-w-md z-10">
         {/* Brand Header */}
         <div className="flex flex-col items-center mb-8">
           <Logo size="lg" className="mb-4" />
-          <h2 className="text-2xl font-bold text-white tracking-tight">Create your account</h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Create your account</h2>
+          <p className="text-xs text-slate-500 mt-1">
             Join PulseChat for simple, fast messaging & HD calling
           </p>
         </div>
 
         {/* Card Form */}
-        <div className="bg-[#0e1320] border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-xl shadow-slate-200/50">
           <form onSubmit={handleSignup} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">
                 Full Name
               </label>
               <input
@@ -86,12 +86,12 @@ export default function SignUp() {
                 placeholder="Alex Morgan"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/60 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm transition"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 text-sm transition"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">
                 Username *
               </label>
               <input
@@ -100,12 +100,12 @@ export default function SignUp() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/60 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm transition"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 text-sm transition"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">
                 Email Address *
               </label>
               <input
@@ -114,12 +114,12 @@ export default function SignUp() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/60 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm transition"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 text-sm transition"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wider">
                 Password * (min. 6 characters)
               </label>
               <div className="relative">
@@ -129,12 +129,12 @@ export default function SignUp() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/60 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm transition pr-16"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 text-sm transition pr-16"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-blue-400 transition"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-blue-600 transition"
                 >
                   {showPassword ? "Hide" : "Show"}
                 </button>
@@ -142,7 +142,7 @@ export default function SignUp() {
             </div>
 
             {error && (
-              <div className="px-3.5 py-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center gap-2">
+              <div className="px-3.5 py-2.5 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs flex items-center gap-2">
                 <span>⚠</span>
                 <span>{error}</span>
               </div>
@@ -157,9 +157,9 @@ export default function SignUp() {
             </button>
           </form>
 
-          <p className="text-center text-xs text-slate-400 mt-6">
+          <p className="text-center text-xs text-slate-500 mt-6">
             Already have an account?{" "}
-            <Link to="/login" className="text-blue-400 hover:text-blue-300 font-semibold transition">
+            <Link to="/login" className="text-blue-600 hover:text-blue-700 font-semibold transition">
               Sign in
             </Link>
           </p>

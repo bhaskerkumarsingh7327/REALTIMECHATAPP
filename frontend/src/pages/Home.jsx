@@ -1038,20 +1038,20 @@ export default function Home() {
   }, [selectedChat?.messages, userData?.username, userData?._id]);
 
   return (
-    <div className="fixed inset-0 flex h-[100dvh] w-full bg-[#0a0d14] text-slate-100 overflow-hidden font-sans select-none">
-      {/* Natural ambient subtle light */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(59,130,246,0.06),rgba(255,255,255,0))] pointer-events-none"></div>
+    <div className="fixed inset-0 flex h-[100dvh] w-full bg-[#f8fafc] text-slate-800 overflow-hidden font-sans select-none">
+      {/* Subtle ambient light */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(59,130,246,0.04),rgba(255,255,255,0))] pointer-events-none"></div>
 
       {/* ======================================================== */}
       {/* LEFT SIDEBAR: Brand, User Profile, Chat List */}
       {/* ======================================================== */}
       <div
-        className={`w-full md:w-[360px] lg:w-[390px] border-r border-slate-800/80 flex flex-col bg-[#0e1320]/95 backdrop-blur-xl ${
+        className={`w-full md:w-[360px] lg:w-[390px] border-r border-slate-200/90 flex flex-col bg-white shadow-sm ${
           selectedChat ? "hidden md:flex" : "flex"
-        } h-full z-10 transition-all shadow-[6px_0_24px_rgba(0,0,0,0.3)]`}
+        } h-full z-10 transition-all`}
       >
         {/* Header: Logo & User Quick Actions */}
-        <div className="p-3.5 border-b border-slate-800/80 flex items-center justify-between flex-shrink-0">
+        <div className="p-3.5 border-b border-slate-200/80 flex items-center justify-between flex-shrink-0 bg-white">
           <Logo size="md" />
 
           <div className="flex items-center gap-1.5">
@@ -1060,8 +1060,8 @@ export default function Home() {
               onClick={toggleSoundMute}
               className={`p-2 rounded-xl transition ${
                 isMutedSounds
-                  ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                  : "bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-700/70 border border-slate-700/50"
+                  ? "bg-red-50 text-red-500 border border-red-200"
+                  : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-slate-200"
               }`}
               title={isMutedSounds ? "Unmute sounds" : "Mute sounds"}
             >
@@ -1071,7 +1071,7 @@ export default function Home() {
             {/* Edit My Profile Button */}
             <button
               onClick={() => setShowMyProfileModal(true)}
-              className="p-2 bg-slate-800/60 hover:bg-slate-700/70 border border-slate-700/50 text-slate-300 hover:text-white rounded-xl transition"
+              className="p-2 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 text-slate-600 hover:text-slate-900 rounded-xl transition"
               title="Edit Profile & Picture"
             >
               <IconUser className="w-4 h-4" />
@@ -1080,7 +1080,7 @@ export default function Home() {
             {/* New Chat Button */}
             <button
               onClick={() => setShowNewChatModal(true)}
-              className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition shadow-md shadow-blue-600/25 transform hover:scale-105 active:scale-95"
+              className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition shadow-sm shadow-blue-600/30 transform hover:scale-105 active:scale-95"
               title="Start New Conversation"
             >
               <IconPlus className="w-4 h-4 stroke-[2.5]" />
@@ -1092,7 +1092,7 @@ export default function Home() {
                 dispatch(clearUserData());
                 navigate("/login");
               }}
-              className="p-2 text-slate-400 hover:text-red-400 rounded-xl hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition"
+              className="p-2 text-slate-400 hover:text-red-500 rounded-xl hover:bg-red-50 border border-transparent hover:border-red-200 transition"
               title="Logout"
             >
               <IconLogOut className="w-4 h-4" />
@@ -1103,7 +1103,7 @@ export default function Home() {
         {/* Current User Quick Info Card (Click to edit picture) */}
         <div
           onClick={() => setShowMyProfileModal(true)}
-          className="px-3.5 py-2.5 mx-3 my-2 rounded-xl bg-slate-800/40 hover:bg-slate-800/70 border border-slate-700/40 flex items-center justify-between shadow-sm cursor-pointer group transition"
+          className="px-3.5 py-2.5 mx-3 my-2 rounded-2xl bg-slate-50 hover:bg-slate-100/90 border border-slate-200/80 flex items-center justify-between shadow-xs cursor-pointer group transition"
           title="Click to edit profile & change picture"
         >
           <div className="flex items-center gap-3 min-w-0">
@@ -1111,24 +1111,24 @@ export default function Home() {
               <img
                 src={userData?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${userData?.username || "me"}`}
                 alt={userData?.username}
-                className="w-10 h-10 rounded-full object-cover border border-slate-700/80 group-hover:border-blue-500/70 transition"
+                className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-xs group-hover:border-blue-500/50 transition"
               />
-              <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#0e1320] rounded-full shadow-sm"></span>
+              <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full shadow-xs"></span>
             </div>
             <div className="min-w-0">
-              <h4 className="font-semibold text-sm text-slate-100 truncate leading-tight group-hover:text-blue-400 transition">
+              <h4 className="font-bold text-sm text-slate-800 truncate leading-tight group-hover:text-blue-600 transition">
                 {userData?.name || userData?.username}
               </h4>
-              <p className="text-[11px] text-emerald-400 font-medium truncate flex items-center gap-1 mt-0.5">
+              <p className="text-[11px] text-emerald-600 font-medium truncate flex items-center gap-1 mt-0.5">
                 <span>● Active</span>
-                <span className="text-slate-600">•</span>
-                <span className="text-slate-400 truncate">Change photo ↗</span>
+                <span className="text-slate-400">•</span>
+                <span className="text-slate-500 truncate">Change photo ↗</span>
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-1">
-            <span className="p-1.5 rounded-lg bg-slate-800/80 group-hover:bg-blue-600/20 text-slate-400 group-hover:text-blue-400 border border-slate-700/40 transition">
+            <span className="p-1.5 rounded-lg bg-white group-hover:bg-blue-50 text-slate-500 group-hover:text-blue-600 border border-slate-200 transition">
               <IconCamera className="w-3.5 h-3.5" />
             </span>
           </div>
@@ -1143,15 +1143,15 @@ export default function Home() {
               placeholder="Search chats, contacts, messages..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:border-blue-500/60 focus:bg-slate-800/80 transition"
+              className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-200/90 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
             />
           </div>
         </div>
 
         {/* Chats List Header */}
-        <div className="px-4 pt-3 pb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400">
+        <div className="px-4 pt-3 pb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500">
           <span>Conversations</span>
-          <span className="text-slate-400 font-mono font-semibold">{chats.length}</span>
+          <span className="text-slate-500 font-mono font-semibold">{chats.length}</span>
         </div>
 
         {/* Chats List */}
@@ -1181,10 +1181,10 @@ export default function Home() {
                 <div
                   key={chat._id}
                   onClick={() => setSelectedChat(chat)}
-                  className={`group relative p-3 rounded-xl cursor-pointer transition-all flex items-center gap-3.5 border ${
+                  className={`group relative p-3 rounded-2xl cursor-pointer transition-all flex items-center gap-3.5 border ${
                     isSelected
-                      ? "bg-blue-600/15 border-blue-500/40 text-white shadow-sm"
-                      : "hover:bg-slate-800/50 text-slate-200 border-transparent hover:border-slate-700/40"
+                      ? "bg-blue-50/90 border-blue-200 text-slate-900 shadow-xs"
+                      : "hover:bg-slate-50 text-slate-700 border-transparent hover:border-slate-200/70"
                   }`}
                 >
                   {/* Avatar with Status Ring */}
@@ -1195,10 +1195,10 @@ export default function Home() {
                         `https://api.dicebear.com/7.x/bottts/svg?seed=${partner.username || "user"}`
                       }
                       alt={partner.username}
-                      className="w-11 h-11 rounded-full object-cover border border-slate-700/80 group-hover:scale-105 transition"
+                      className="w-11 h-11 rounded-full object-cover border border-slate-200 group-hover:scale-105 transition"
                     />
                     {isOnline && (
-                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#0e1320] rounded-full shadow-sm"></span>
+                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full shadow-xs"></span>
                     )}
                   </div>
 
@@ -1206,11 +1206,11 @@ export default function Home() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
                       <div className="flex items-center gap-1.5 truncate">
-                        <span className="font-semibold text-sm truncate text-slate-100">
+                        <span className={`font-semibold text-sm truncate ${isSelected ? "text-blue-900" : "text-slate-800"}`}>
                           {partner.name || partner.username}
                         </span>
                         {chat.isAIChat && (
-                          <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 bg-blue-500/15 text-blue-400 rounded border border-blue-500/25">
+                          <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-200">
                             <IconSparkles className="w-2.5 h-2.5" /> AI
                           </span>
                         )}
@@ -1226,13 +1226,13 @@ export default function Home() {
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <p className={`text-xs truncate ${isSelected ? "text-slate-200 font-medium" : "text-slate-400"}`}>
+                      <p className={`text-xs truncate ${isSelected ? "text-blue-800/90 font-medium" : "text-slate-500"}`}>
                         {chat.lastMessage || "No messages yet"}
                       </p>
 
                       {/* Unread message count badge */}
                       {unreadCount > 0 && !isSelected && (
-                        <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-sm flex-shrink-0">
+                        <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-xs flex-shrink-0">
                           {unreadCount}
                         </span>
                       )}
@@ -1248,14 +1248,14 @@ export default function Home() {
       {/* RIGHT MAIN AREA: Chat Conversation Screen */}
       {/* ======================================================== */}
       <div
-        className={`flex-1 flex flex-col bg-[#0a0d14] h-full ${
+        className={`flex-1 flex flex-col bg-[#f8fafc] h-full ${
           !selectedChat ? "hidden md:flex" : "flex"
         } relative overflow-hidden`}
       >
         {selectedChat ? (
           <>
             {/* Chat Top Header Bar */}
-            <div className="p-3 md:p-3.5 bg-[#0e1320]/95 border-b border-slate-800/80 backdrop-blur-xl flex items-center justify-between z-20 shadow-sm">
+            <div className="p-3 md:p-3.5 bg-white/95 border-b border-slate-200/90 backdrop-blur-xl flex items-center justify-between z-20 shadow-xs">
               {/* Partner Info (Click to open profile modal) */}
               <div
                 onClick={() => {
@@ -1272,7 +1272,7 @@ export default function Home() {
                     e.stopPropagation();
                     setSelectedChat(null);
                   }}
-                  className="md:hidden p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800/60 transition -ml-1"
+                  className="md:hidden p-2 text-slate-500 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition -ml-1"
                 >
                   ←
                 </button>
@@ -1284,48 +1284,48 @@ export default function Home() {
                       `https://api.dicebear.com/7.x/bottts/svg?seed=${currentPartner?.username || "user"}`
                     }
                     alt={currentPartner?.username}
-                    className="w-10 h-10 rounded-full object-cover border border-slate-700/80 group-hover:border-blue-500/70 transition"
+                    className="w-10 h-10 rounded-full object-cover border border-slate-200 group-hover:border-blue-500 transition shadow-xs"
                   />
                   {isPartnerOnline ? (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#0e1320] rounded-full animate-pulse"></span>
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full animate-pulse"></span>
                   ) : (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-slate-600 border-2 border-[#0e1320] rounded-full"></span>
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-slate-400 border-2 border-white rounded-full"></span>
                   )}
                 </div>
 
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-sm md:text-base text-slate-100 truncate group-hover:text-blue-400 transition flex items-center gap-1.5">
+                    <h3 className="font-semibold text-sm md:text-base text-slate-900 truncate group-hover:text-blue-600 transition flex items-center gap-1.5">
                       <span>{currentPartner?.name || currentPartner?.username}</span>
                       {isContactBlockedByMe && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-bold border border-red-500/25">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-bold border border-red-200">
                           Blocked
                         </span>
                       )}
                       {!selectedChat.isAIChat && (
-                        <span className="text-[10px] text-slate-500 group-hover:text-blue-400 transition">
+                        <span className="text-[10px] text-slate-400 group-hover:text-blue-600 transition">
                           ↗
                         </span>
                       )}
                     </h3>
                     {selectedChat.isAIChat && (
-                      <span className="text-[10px] bg-blue-500/15 text-blue-400 px-2 py-0.5 rounded-full font-bold border border-blue-500/25">
+                      <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold border border-blue-200">
                         Neural Bot
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-400 truncate">
+                  <p className="text-[11px] text-slate-500 truncate">
                     {remoteTypingUser ? (
-                      <span className="text-blue-400 font-medium animate-pulse">
+                      <span className="text-blue-600 font-medium animate-pulse">
                         ✍️ {remoteTypingUser} is typing...
                       </span>
                     ) : isPartnerOnline ? (
-                      <span className="text-emerald-400 font-medium flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                      <span className="text-emerald-600 font-medium flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                         Active Now
                       </span>
                     ) : (
-                      <span className="text-slate-400">
+                      <span className="text-slate-500">
                         Last seen {formatRelativeTime(currentPartner?.lastSeen)}
                       </span>
                     )}
@@ -1340,10 +1340,10 @@ export default function Home() {
                     <button
                       disabled={isContactBlockedByMe}
                       onClick={() => startCall("audio")}
-                      className={`p-2 rounded-xl border transition shadow-sm ${
+                      className={`p-2 rounded-xl border transition shadow-xs ${
                         isContactBlockedByMe
-                          ? "bg-slate-800/20 text-slate-600 border-slate-800/40 cursor-not-allowed"
-                          : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/20 hover:scale-105 active:scale-95"
+                          ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                          : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-200 hover:scale-105 active:scale-95"
                       }`}
                       title={isContactBlockedByMe ? "Unblock contact to call" : "Start Voice Call"}
                     >
@@ -1353,10 +1353,10 @@ export default function Home() {
                     <button
                       disabled={isContactBlockedByMe}
                       onClick={() => startCall("video")}
-                      className={`p-2 rounded-xl border transition shadow-sm ${
+                      className={`p-2 rounded-xl border transition shadow-xs ${
                         isContactBlockedByMe
-                          ? "bg-slate-800/20 text-slate-600 border-slate-800/40 cursor-not-allowed"
-                          : "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border-blue-500/20 hover:scale-105 active:scale-95"
+                          ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                          : "bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200 hover:scale-105 active:scale-95"
                       }`}
                       title={isContactBlockedByMe ? "Unblock contact to call" : "Start Video Call"}
                     >
@@ -1365,7 +1365,7 @@ export default function Home() {
 
                     <button
                       onClick={() => setShowProfileModal(true)}
-                      className="p-2 rounded-xl bg-slate-800/60 text-slate-300 hover:text-white hover:bg-slate-700/70 border border-slate-700/50 transition shadow-sm"
+                      className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80 border border-slate-200 transition shadow-xs"
                       title="Contact Profile & Shared Media"
                     >
                       <IconInfo className="w-4 h-4" />
@@ -1373,7 +1373,7 @@ export default function Home() {
 
                     <button
                       onClick={handleDeleteChat}
-                      className="p-2 rounded-xl bg-slate-800/40 text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition"
+                      className="p-2 rounded-xl bg-slate-100 text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 hover:border-red-200 transition"
                       title="Delete Conversation"
                     >
                       <IconTrash className="w-4 h-4" />
@@ -1385,14 +1385,14 @@ export default function Home() {
 
             {/* BLOCKED CONTACT WARNING BANNER WITH INSTANT UNBLOCK */}
             {isContactBlockedByMe && (
-              <div className="bg-red-500/20 border-b border-red-500/35 px-4 py-2.5 flex items-center justify-between text-xs text-red-200 z-20 backdrop-blur-md animate-fade-in shadow-md">
+              <div className="bg-red-50 border-b border-red-200 px-4 py-2.5 flex items-center justify-between text-xs text-red-700 z-20 backdrop-blur-md animate-fade-in shadow-xs">
                 <div className="flex items-center gap-2 min-w-0">
-                  <IconBan className="w-4 h-4 text-red-400 flex-shrink-0" />
-                  <span className="truncate">You have blocked this contact. They cannot message or call you.</span>
+                  <IconBan className="w-4 h-4 text-red-500 flex-shrink-0" />
+                  <span className="truncate font-medium">You have blocked this contact. They cannot message or call you.</span>
                 </div>
                 <button
                   onClick={handleToggleBlockContact}
-                  className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs transition shadow-md hover:scale-105 active:scale-95 flex-shrink-0 ml-2"
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-sm hover:scale-105 active:scale-95 flex-shrink-0 ml-2"
                 >
                   Unblock Contact
                 </button>
@@ -1403,7 +1403,7 @@ export default function Home() {
             {(callState === "in-call" || callState === "outgoing") && (
               <div
                 onClick={() => setIsCallMinimized(false)}
-                className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 px-4 py-2.5 flex items-center justify-between cursor-pointer hover:brightness-110 transition shadow-lg text-white select-none z-20"
+                className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 px-4 py-2.5 flex items-center justify-between cursor-pointer hover:brightness-105 transition shadow-md text-white select-none z-20"
               >
                 <div className="flex items-center gap-2.5">
                   <span className="relative flex h-3 w-3">
@@ -1420,7 +1420,7 @@ export default function Home() {
                     • Tap anywhere to return to calling screen ↗
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs font-semibold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition shadow-sm">
+                <div className="flex items-center gap-1.5 text-xs font-semibold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition shadow-xs">
                   <span>Return to Call</span>
                   <IconMaximize className="w-3.5 h-3.5" />
                 </div>
@@ -1443,10 +1443,10 @@ export default function Home() {
                             setIsCallMinimized(false);
                           }
                         }}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.06] border border-white/10 text-xs text-gray-200 font-medium shadow-sm backdrop-blur-md hover:bg-white/[0.1] transition cursor-pointer select-none"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200/90 text-xs text-slate-700 font-medium shadow-xs hover:bg-slate-50 transition cursor-pointer select-none"
                       >
                         <span>{msg.text}</span>
-                        <span className="text-[10px] text-gray-400 font-mono">
+                        <span className="text-[10px] text-slate-400 font-mono">
                           {msg.createdAt
                             ? new Date(msg.createdAt).toLocaleTimeString([], {
                                 hour: "2-digit",
@@ -1465,22 +1465,22 @@ export default function Home() {
                     className={`flex flex-col ${isSender ? "items-end" : "items-start"} group relative`}
                   >
                     <div
-                      className={`relative max-w-[85%] md:max-w-[70%] rounded-2xl p-3.5 px-4 shadow-sm transition-all ${
+                      className={`relative max-w-[85%] md:max-w-[70%] rounded-2xl p-3.5 px-4 transition-all ${
                         isSender
-                          ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-xs shadow-blue-950/20"
-                          : "bg-[#161f30] border border-slate-700/60 text-slate-100 rounded-bl-xs backdrop-blur-md"
+                          ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-br-xs shadow-md shadow-blue-500/15"
+                          : "bg-white border border-slate-200/90 text-slate-800 rounded-bl-xs shadow-xs"
                       }`}
                     >
                       {/* Sender label in received mode */}
                       {!isSender && (
-                        <p className="text-[11px] font-semibold text-blue-400 mb-1">
+                        <p className="text-[11px] font-bold text-blue-600 mb-1">
                           {msg.sender}
                         </p>
                       )}
 
                       {/* Image Attachment */}
                       {msg.mediaType === "image" && msg.mediaUrl && (
-                        <div className="my-1 rounded-xl overflow-hidden cursor-pointer border border-white/10">
+                        <div className="my-1 rounded-xl overflow-hidden cursor-pointer border border-slate-200/80">
                           <img
                             src={getMediaUrl(msg.mediaUrl)}
                             alt="Attached"
@@ -1501,12 +1501,18 @@ export default function Home() {
                           href={getMediaUrl(msg.mediaUrl)}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex items-center gap-3 p-2.5 my-1 rounded-xl bg-black/25 hover:bg-black/40 border border-white/10 transition text-xs"
+                          className={`flex items-center gap-3 p-2.5 my-1 rounded-xl transition text-xs border ${
+                            isSender
+                              ? "bg-white/15 hover:bg-white/25 border-white/20 text-white"
+                              : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800"
+                          }`}
                         >
-                          <IconPaperclip className="w-5 h-5 text-blue-300" />
+                          <IconPaperclip className={`w-5 h-5 ${isSender ? "text-blue-100" : "text-blue-600"}`} />
                           <div className="flex-1 truncate">
                             <p className="font-semibold truncate">{msg.fileName || msg.text || "File"}</p>
-                            <span className="text-[10px] text-gray-400">{msg.fileSize || "Attachment"}</span>
+                            <span className={`text-[10px] ${isSender ? "text-blue-200" : "text-slate-400"}`}>
+                              {msg.fileSize || "Attachment"}
+                            </span>
                           </div>
                         </a>
                       )}
@@ -1519,8 +1525,12 @@ export default function Home() {
                       )}
 
                       {/* Message Metadata (Time & Delivery/Seen Status) */}
-                      <div className="flex items-center justify-end gap-1.5 mt-1 text-[10px] select-none">
-                        <span className="opacity-75">
+                      <div
+                        className={`flex items-center justify-end gap-1.5 mt-1 text-[10px] select-none ${
+                          isSender ? "text-blue-100" : "text-slate-400"
+                        }`}
+                      >
+                        <span className="opacity-80">
                           {msg.createdAt
                             ? new Date(msg.createdAt).toLocaleTimeString([], {
                                 hour: "2-digit",
@@ -1540,12 +1550,12 @@ export default function Home() {
                                   </span>
                                 )}
                                 <span title={msg.seenAt ? `Seen ${formatRelativeTime(msg.seenAt)}` : "Seen"}>
-                                  <IconCheckDouble className="w-3.5 h-3.5 text-sky-300 stroke-[2.5]" />
+                                  <IconCheckDouble className="w-3.5 h-3.5 text-sky-200 stroke-[2.5]" />
                                 </span>
                               </>
                             ) : (
                               <span title="Delivered">
-                                <IconCheckDouble className="w-3.5 h-3.5 text-white/50" />
+                                <IconCheckDouble className="w-3.5 h-3.5 text-white/60" />
                               </span>
                             )}
                           </div>
@@ -1561,10 +1571,10 @@ export default function Home() {
                               <button
                                 key={rIdx}
                                 onClick={() => handleReaction(msg._id, emoji)}
-                                className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700/60 hover:bg-slate-700/80 transition"
+                                className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white border border-slate-200 shadow-xs hover:bg-slate-50 text-slate-800 transition"
                               >
                                 <span>{emoji}</span>
-                                <span className="font-mono text-[10px] font-bold">{count}</span>
+                                <span className="font-mono text-[10px] font-bold text-slate-600">{count}</span>
                               </button>
                             );
                           })}
@@ -1577,7 +1587,7 @@ export default function Home() {
                       <div
                         className={`absolute -top-7 ${
                           isSender ? "right-2" : "left-2"
-                        } hidden group-hover:flex items-center gap-1 bg-slate-800/95 border border-slate-700/70 rounded-full px-2 py-1 shadow-xl backdrop-blur-md z-20`}
+                        } hidden group-hover:flex items-center gap-1 bg-white border border-slate-200 rounded-full px-2 py-1 shadow-lg z-20`}
                       >
                         {["❤️", "👍", "😂", "🔥", "😮", "👏"].map((emoji) => (
                           <button
@@ -1597,7 +1607,7 @@ export default function Home() {
                               setCopiedMsgId(msg._id);
                               setTimeout(() => setCopiedMsgId(null), 1500);
                             }}
-                            className="p-1 text-slate-400 hover:text-white transition"
+                            className="p-1 text-slate-400 hover:text-slate-700 transition"
                             title={copiedMsgId === msg._id ? "Copied!" : "Copy message"}
                           >
                             <IconCopy className="w-3.5 h-3.5" />
@@ -1608,7 +1618,7 @@ export default function Home() {
                         {isSender && (
                           <button
                             onClick={() => handleDeleteMessage(msg._id)}
-                            className="p-1 text-slate-400 hover:text-red-400 transition"
+                            className="p-1 text-slate-400 hover:text-red-500 transition"
                             title="Delete Message"
                           >
                             <IconTrash className="w-3.5 h-3.5" />
@@ -1624,15 +1634,15 @@ export default function Home() {
             </div>
 
             {/* Chat Bottom Input Bar */}
-            <div className="relative p-3 md:p-3.5 bg-[#0e1320]/95 border-t border-slate-800/80 backdrop-blur-xl">
+            <div className="relative p-3 md:p-3.5 bg-white/95 border-t border-slate-200/90 backdrop-blur-xl shadow-xs">
               {/* If user is blocked */}
               {isContactBlockedByMe ? (
-                <div className="flex items-center justify-center gap-3 py-3 px-4 text-xs text-slate-300 bg-slate-800/60 rounded-xl border border-slate-700/50">
-                  <IconBan className="w-4 h-4 text-red-400" />
+                <div className="flex items-center justify-center gap-3 py-3 px-4 text-xs text-slate-600 bg-slate-100 rounded-xl border border-slate-200">
+                  <IconBan className="w-4 h-4 text-red-500" />
                   <span>You have blocked this contact.</span>
                   <button
                     onClick={handleToggleBlockContact}
-                    className="px-3.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 font-semibold transition hover:scale-105 active:scale-95 ml-2"
+                    className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition hover:scale-105 active:scale-95 ml-2 shadow-xs"
                   >
                     Unblock to Chat
                   </button>
@@ -1661,7 +1671,7 @@ export default function Home() {
                       {/* Emoji toggle */}
                       <button
                         onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                        className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/60 transition"
+                        className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
                         title="Emojis"
                       >
                         <IconSmile className="w-5 h-5" />
@@ -1676,7 +1686,7 @@ export default function Home() {
                       />
                       <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/60 transition"
+                        className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
                         title="Send Photo or Document"
                       >
                         <IconPaperclip className="w-5 h-5" />
@@ -1693,14 +1703,14 @@ export default function Home() {
                             ? "Ask Pulse AI anything..."
                             : "Type your message..."
                         }
-                        className="flex-1 bg-slate-800/50 border border-slate-700/60 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-blue-500/70 focus:bg-slate-800/80 transition"
+                        className="flex-1 bg-slate-100/90 border border-slate-200/90 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 transition"
                       />
 
                       {/* Mic / Voice Recording Button */}
                       {!messageText.trim() ? (
                         <button
                           onClick={() => setIsRecordingVoice(true)}
-                          className="p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-700/70 text-slate-300 hover:text-white border border-slate-700/50 transition"
+                          className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-600 hover:text-slate-900 border border-slate-200 transition"
                           title="Record Voice Note"
                         >
                           <IconMic className="w-5 h-5" />
@@ -1723,17 +1733,17 @@ export default function Home() {
           </>
         ) : (
           /* Empty Chat State - Clean Natural Modern Graphic */
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center z-10">
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center z-10 bg-[#f8fafc]">
             <div className="relative mb-6">
-              <div className="absolute -inset-4 bg-blue-600/15 rounded-full blur-2xl opacity-60"></div>
+              <div className="absolute -inset-4 bg-blue-500/10 rounded-full blur-2xl opacity-60"></div>
               <Logo size="xl" showTag={false} className="relative opacity-95" />
             </div>
 
-            <h3 className="text-2xl md:text-3xl font-extrabold text-white mb-2.5 tracking-tight">
-              Welcome to Pulse<span className="text-blue-500">Chat</span>
+            <h3 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-2.5 tracking-tight">
+              Welcome to Pulse<span className="text-blue-600">Chat</span>
             </h3>
 
-            <p className="text-slate-400 text-sm max-w-md mb-6 leading-relaxed">
+            <p className="text-slate-500 text-sm max-w-md mb-6 leading-relaxed">
               Experience fast, secure realtime messaging, crystal-clear voice and HD video calling, voice notes, and smart AI assistance.
             </p>
 
@@ -1750,9 +1760,9 @@ export default function Home() {
                   const ai = chats.find((c) => c.isAIChat);
                   if (ai) setSelectedChat(ai);
                 }}
-                className="px-5 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/60 font-semibold text-xs tracking-wide hover:scale-105 active:scale-95 transition flex items-center gap-2"
+                className="px-5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-xs tracking-wide hover:scale-105 active:scale-95 transition flex items-center gap-2 shadow-xs"
               >
-                <IconSparkles className="w-4 h-4 text-blue-400" />
+                <IconSparkles className="w-4 h-4 text-blue-600" />
                 <span>Talk to Pulse AI</span>
               </button>
             </div>
@@ -1820,13 +1830,13 @@ export default function Home() {
       {/* 6. NEW CHAT SEARCH MODAL */}
       {/* ======================================================== */}
       {showNewChatModal && (
-        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-[#0e1320] border border-slate-800 rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh]">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
-              <h3 className="text-base font-bold text-slate-100">Start New Conversation</h3>
+        <div className="fixed inset-0 z-[120] bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh] text-slate-900">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200 mb-4">
+              <h3 className="text-base font-bold text-slate-900">Start New Conversation</h3>
               <button
                 onClick={() => setShowNewChatModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition"
               >
                 <IconClose className="w-5 h-5" />
               </button>
@@ -1841,39 +1851,39 @@ export default function Home() {
                 value={searchFilter}
                 onChange={(e) => handleUserSearch(e.target.value)}
                 autoFocus
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-800/60 border border-slate-700/60 rounded-xl text-sm text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition"
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white transition"
               />
             </div>
 
             {/* Results List */}
             <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
               {isSearchingUsers ? (
-                <div className="text-center py-8 text-slate-500 text-sm">Searching...</div>
+                <div className="text-center py-8 text-slate-400 text-sm">Searching...</div>
               ) : userSearchResults.length > 0 ? (
                 userSearchResults.map((user) => (
                   <div
                     key={user._id}
                     onClick={() => handleStartChatWithUser(user)}
-                    className="p-3 rounded-xl hover:bg-blue-600/15 border border-transparent hover:border-blue-500/30 flex items-center gap-3.5 cursor-pointer transition"
+                    className="p-3 rounded-xl hover:bg-blue-50/70 border border-transparent hover:border-blue-200 flex items-center gap-3.5 cursor-pointer transition"
                   >
                     <img
                       src={user.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.username}`}
                       alt={user.username}
-                      className="w-10 h-10 rounded-full object-cover border border-slate-700/70"
+                      className="w-10 h-10 rounded-full object-cover border border-slate-200"
                     />
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-sm text-slate-100 truncate">{user.name || user.username}</h4>
-                      <p className="text-xs text-slate-400 truncate">@{user.username}</p>
+                      <h4 className="font-semibold text-sm text-slate-900 truncate">{user.name || user.username}</h4>
+                      <p className="text-xs text-slate-500 truncate">@{user.username}</p>
                     </div>
-                    <span className="text-xs text-blue-400 font-semibold px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <span className="text-xs text-blue-600 font-semibold px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200">
                       Chat →
                     </span>
                   </div>
                 ))
               ) : searchFilter.trim() ? (
-                <div className="text-center py-8 text-slate-500 text-sm">No users found.</div>
+                <div className="text-center py-8 text-slate-400 text-sm">No users found.</div>
               ) : (
-                <div className="text-center py-8 text-slate-500 text-xs">
+                <div className="text-center py-8 text-slate-400 text-xs">
                   Type a username or email to search registered users.
                 </div>
               )}
