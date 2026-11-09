@@ -24,10 +24,12 @@ console.log("[PULSECHAT] Connected backend target:", serverUrl);
 // Set axios defaults and token interceptor
 axios.defaults.withCredentials = true;
 axios.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  try {
+    const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  } catch (e) {}
   return config;
 });
 

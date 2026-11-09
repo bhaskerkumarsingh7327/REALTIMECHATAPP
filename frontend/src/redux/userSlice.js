@@ -2,7 +2,7 @@ import { createSlice } from "@reduxjs/toolkit";
 
 let storedUser = null;
 try {
-  const local = localStorage.getItem("userData");
+  const local = typeof localStorage !== "undefined" ? localStorage.getItem("userData") : null;
   if (local && local !== "undefined") {
     storedUser = JSON.parse(local);
   }
@@ -10,32 +10,47 @@ try {
   storedUser = null;
 }
 
+let storedToken = null;
+try {
+  storedToken = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+} catch (e) {
+  storedToken = null;
+}
+
 const userSlice = createSlice({
   name: "user",
   initialState: {
     userData: storedUser,
-    token: localStorage.getItem("token") || null,
+    token: storedToken,
   },
   reducers: {
     setUserData: (state, action) => {
       state.userData = action.payload;
       try {
-        localStorage.setItem("userData", JSON.stringify(action.payload));
+        if (action.payload) {
+          localStorage.setItem("userData", JSON.stringify(action.payload));
+        } else {
+          localStorage.removeItem("userData");
+        }
       } catch (e) {}
     },
     setToken: (state, action) => {
       state.token = action.payload;
-      if (action.payload) {
-        localStorage.setItem("token", action.payload);
-      } else {
-        localStorage.removeItem("token");
-      }
+      try {
+        if (action.payload) {
+          localStorage.setItem("token", action.payload);
+        } else {
+          localStorage.removeItem("token");
+        }
+      } catch (e) {}
     },
     clearUserData: (state) => {
       state.userData = null;
       state.token = null;
-      localStorage.removeItem("userData");
-      localStorage.removeItem("token");
+      try {
+        localStorage.removeItem("userData");
+        localStorage.removeItem("token");
+      } catch (e) {}
     },
   },
 });

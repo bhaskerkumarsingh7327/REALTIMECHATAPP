@@ -1383,8 +1383,8 @@ export default function Home() {
         const partner = getChatPartner(c);
         const q = searchFilter.toLowerCase();
         const matches =
-          partner.username?.toLowerCase().includes(q) ||
-          partner.name?.toLowerCase().includes(q) ||
+          partner?.username?.toLowerCase().includes(q) ||
+          partner?.name?.toLowerCase().includes(q) ||
           c.lastMessage?.toLowerCase().includes(q);
         if (!matches) return false;
       }
@@ -1447,7 +1447,11 @@ export default function Home() {
       {/* ======================================================== */}
       {/* 1. FAR-LEFT VERTICAL ICON RAIL (WhatsApp Web Desktop Layout) */}
       {/* ======================================================== */}
-      <div className="w-[60px] md:w-[68px] h-full bg-[#111b21] border-r border-[#222d34] flex flex-col items-center py-3.5 flex-shrink-0 z-30 select-none">
+      <div
+        className={`w-[56px] sm:w-[60px] md:w-[68px] h-full bg-[#111b21] border-r border-[#222d34] flex flex-col items-center py-3.5 flex-shrink-0 z-30 select-none ${
+          selectedChat ? "hidden md:flex" : "flex"
+        }`}
+      >
         {/* Top Navigation Rail Icons */}
         <div className="flex flex-col items-center gap-2 w-full">
           {/* 1. Chats Icon with Green Unread Badge */}
@@ -1689,9 +1693,9 @@ export default function Home() {
       {/* 2. ADJACENT LIST PANEL (Chats, Status, Calls, Groups, Channels) */}
       {/* ======================================================== */}
       <div
-        className={`w-full md:w-[380px] lg:w-[410px] border-r border-[#222d34] flex flex-col bg-[#111b21] shadow-xl ${
+        className={`flex-1 md:w-[380px] lg:w-[410px] md:flex-initial border-r border-[#222d34] flex flex-col bg-[#111b21] shadow-xl ${
           selectedChat ? "hidden md:flex" : "flex"
-        } h-full z-10 transition-all overflow-hidden flex-shrink-0`}
+        } h-full z-10 transition-all overflow-hidden flex-shrink-0 min-w-0`}
       >
         {/* TAB 1: CHATS VIEW */}
         {sidebarTab === "chats" && (
