@@ -13,3 +13,4 @@ const callLogSchema = new mongoose.Schema(
 );
 
 export default mongoose.model("CallLog", callLogSchema);
+

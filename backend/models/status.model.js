@@ -19,3 +19,4 @@ const statusSchema = new mongoose.Schema(
 );
 
 export default mongoose.model("Status", statusSchema);
+

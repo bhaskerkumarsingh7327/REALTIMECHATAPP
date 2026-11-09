@@ -284,3 +284,4 @@ export default function CreateStatusModal({ currentUser, onClose, onStatusCreate
     </div>
   );
 }
+

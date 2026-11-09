@@ -48,6 +48,13 @@ import {
   IconArrowUpRight,
   IconEye,
   IconPalette,
+  IconChatPlus,
+  IconChannels,
+  IconMediaGallery,
+  IconMetaAI,
+  IconUserPlus,
+  IconStar,
+  IconSettings,
 } from "../components/Icons";
 import { sounds } from "../utils/soundEffects";
 import { PULSE_AI_USER, generateAIResponse } from "../utils/aiBot";
@@ -163,6 +170,28 @@ export default function Home() {
   useEffect(() => {
     mutedChatsRef.current = mutedChats;
   }, [mutedChats]);
+
+  // WhatsApp-style Vertical Rail Profile Menu State
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const profileMenuRef = useRef(null);
+
+  // Chat filter chips state: "all" | "unread" | "favourites" | "groups" | "ai"
+  const [chatFilter, setChatFilter] = useState("all");
+
+  // Click outside to close profile popup menu
+  useEffect(() => {
+    const handleProfileOutside = (e) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+        setShowProfileMenu(false);
+      }
+    };
+    if (showProfileMenu) {
+      document.addEventListener("mousedown", handleProfileOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleProfileOutside);
+    };
+  }, [showProfileMenu]);
 
   // Click outside to close 3-dot dropdown menu
   useEffect(() => {
@@ -1326,308 +1355,625 @@ export default function Home() {
     return selectedChat.messages.filter((m) => m.text && m.text.toLowerCase().includes(q)).length;
   }, [chatSearchQuery, selectedChat?.messages]);
 
+  // 1. Calculate total unread messages count for the Chats icon badge
+  const totalUnreadMessages = useMemo(() => {
+    if (!chats || !Array.isArray(chats)) return 0;
+    return chats.reduce((acc, c) => {
+      if (c.isAIChat) return acc;
+      const count =
+        c.messages?.filter((m) => m.sender !== userData?.username && !m.seen).length || 0;
+      return acc + count;
+    }, 0);
+  }, [chats, userData?.username]);
+
+  // 2. Calculate missed calls count for the Calls icon badge
+  const missedCallsCount = useMemo(() => {
+    if (!callLogs || !Array.isArray(callLogs)) return 0;
+    return callLogs.filter((log) => {
+      const isCaller = String(log.caller?._id || log.caller) === String(userData?._id);
+      return !isCaller && (log.status === "missed" || log.status === "declined");
+    }).length;
+  }, [callLogs, userData?._id]);
+
+  // 3. Filtered chats based on text search and filter chips (All, Unread, Favourites, Groups, AI)
+  const filteredChats = useMemo(() => {
+    return chats.filter((c) => {
+      // Text search
+      if (searchFilter.trim()) {
+        const partner = getChatPartner(c);
+        const q = searchFilter.toLowerCase();
+        const matches =
+          partner.username?.toLowerCase().includes(q) ||
+          partner.name?.toLowerCase().includes(q) ||
+          c.lastMessage?.toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+
+      // Filter chips
+      if (chatFilter === "unread") {
+        if (c.isAIChat) return false;
+        const unread =
+          c.messages?.filter((m) => m.sender !== userData?.username && !m.seen).length || 0;
+        return unread > 0;
+      }
+      if (chatFilter === "favourites") {
+        return mutedChats.has(c._id);
+      }
+      if (chatFilter === "groups") {
+        return c.isGroup === true;
+      }
+      if (chatFilter === "ai") {
+        return c.isAIChat === true;
+      }
+      return true;
+    });
+  }, [chats, searchFilter, chatFilter, userData?.username, mutedChats]);
+
+  // 4. Quick handler to open Pulse AI Chat
+  const handleOpenAIChat = () => {
+    const aiChat = chats.find((c) => c.isAIChat) || {
+      _id: "pulse_ai_chat_special",
+      isAIChat: true,
+      members: [userData, PULSE_AI_USER],
+      messages: [
+        {
+          _id: "ai_intro_1",
+          sender: "Pulse AI",
+          text: "Welcome to PulseChat! 🚀 I'm Pulse AI, your intelligent neural companion. Ask me anything or chat with friends!",
+          createdAt: new Date(),
+        },
+      ],
+      lastMessage: "⚡ Pulse AI is online and ready to assist you.",
+      lastMessageAt: new Date(),
+    };
+    setSelectedChat(aiChat);
+    setSidebarTab("chats");
+    setChatFilter("ai");
+  };
+
+  // 5. Quick handler to invite friends
+  const handleInviteFriend = () => {
+    const url = window.location.origin;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+      alert("PulseChat link copied to clipboard! Share it with your friends.");
+    } else {
+      prompt("Share this link with your friends:", url);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 flex h-[100dvh] w-full bg-[#f8fafc] text-slate-800 overflow-hidden font-sans select-none">
-      {/* Subtle ambient light */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(59,130,246,0.04),rgba(255,255,255,0))] pointer-events-none"></div>
-
+    <div className="fixed inset-0 flex h-[100dvh] w-full bg-[#111b21] text-[#e9edef] overflow-hidden font-sans select-none">
       {/* ======================================================== */}
-      {/* LEFT SIDEBAR: Brand, User Profile, Chat List */}
+      {/* 1. FAR-LEFT VERTICAL ICON RAIL (WhatsApp Web Desktop Layout) */}
       {/* ======================================================== */}
-      <div
-        className={`w-full md:w-[360px] lg:w-[390px] border-r border-slate-200/90 flex flex-col bg-white shadow-sm ${
-          selectedChat ? "hidden md:flex" : "flex"
-        } h-full z-10 transition-all`}
-      >
-        {/* Header: Logo & User Quick Actions */}
-        <div className="p-3.5 border-b border-slate-200/80 flex items-center justify-between flex-shrink-0 bg-white">
-          <Logo size="md" />
-
-          <div className="flex items-center gap-1.5">
-            {/* Sound toggle */}
-            <button
-              onClick={toggleSoundMute}
-              className={`p-2 rounded-xl transition ${
-                isMutedSounds
-                  ? "bg-red-50 text-red-500 border border-red-200"
-                  : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-slate-200"
-              }`}
-              title={isMutedSounds ? "Unmute sounds" : "Mute sounds"}
-            >
-              {isMutedSounds ? <IconVolumeX className="w-4 h-4" /> : <IconVolume2 className="w-4 h-4" />}
-            </button>
-
-            {/* Edit My Profile Button */}
-            <button
-              onClick={() => setShowMyProfileModal(true)}
-              className="p-2 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 text-slate-600 hover:text-slate-900 rounded-xl transition"
-              title="Edit Profile & Picture"
-            >
-              <IconUser className="w-4 h-4" />
-            </button>
-
-            {/* New Group Button */}
-            <button
-              onClick={() => setShowCreateGroupModal(true)}
-              className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl transition border border-indigo-200"
-              title="Create New Group"
-            >
-              <IconUsers className="w-4 h-4" />
-            </button>
-
-            {/* New Chat Button */}
-            <button
-              onClick={() => setShowNewChatModal(true)}
-              className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition shadow-sm shadow-blue-600/30 transform hover:scale-105 active:scale-95"
-              title="Start New Conversation"
-            >
-              <IconPlus className="w-4 h-4 stroke-[2.5]" />
-            </button>
-
-            {/* Logout */}
-            <button
-              onClick={() => {
-                dispatch(clearUserData());
-                navigate("/login");
-              }}
-              className="p-2 text-slate-400 hover:text-red-500 rounded-xl hover:bg-red-50 border border-transparent hover:border-red-200 transition"
-              title="Logout"
-            >
-              <IconLogOut className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Current User Quick Info Card (Click to edit picture) */}
-        <div
-          onClick={() => setShowMyProfileModal(true)}
-          className="px-3.5 py-2.5 mx-3 my-2 rounded-2xl bg-slate-50 hover:bg-slate-100/90 border border-slate-200/80 flex items-center justify-between shadow-xs cursor-pointer group transition"
-          title="Click to edit profile & change picture"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="relative flex-shrink-0">
-              <img
-                src={userData?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${userData?.username || "me"}`}
-                alt={userData?.username}
-                className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-xs group-hover:border-blue-500/50 transition"
-              />
-              <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full shadow-xs"></span>
-            </div>
-            <div className="min-w-0">
-              <h4 className="font-bold text-sm text-slate-800 truncate leading-tight group-hover:text-blue-600 transition">
-                {userData?.name || userData?.username}
-              </h4>
-              <p className="text-[11px] text-emerald-600 font-medium truncate flex items-center gap-1 mt-0.5">
-                <span>● Active</span>
-                <span className="text-slate-400">•</span>
-                <span className="text-slate-500 truncate">Change photo ↗</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1">
-            <span className="p-1.5 rounded-lg bg-white group-hover:bg-blue-50 text-slate-500 group-hover:text-blue-600 border border-slate-200 transition">
-              <IconCamera className="w-3.5 h-3.5" />
-            </span>
-          </div>
-        </div>
-
-        {/* WhatsApp-Style Navigation Tabs: Chats, Status, Calls */}
-        <div className="px-3 pt-1 pb-2 flex items-center justify-between gap-1 border-b border-slate-200/80 bg-white">
+      <div className="w-[60px] md:w-[68px] h-full bg-[#111b21] border-r border-[#222d34] flex flex-col items-center py-3.5 flex-shrink-0 z-30 select-none">
+        {/* Top Navigation Rail Icons */}
+        <div className="flex flex-col items-center gap-2 w-full">
+          {/* 1. Chats Icon with Green Unread Badge */}
           <button
             onClick={() => setSidebarTab("chats")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-semibold transition ${
+            className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all ${
               sidebarTab === "chats"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                ? "bg-[#374248] text-[#00a884]"
+                : "text-[#aebac1] hover:text-white hover:bg-[#202c33]"
             }`}
+            title="Chats"
           >
-            <IconChat className="w-4 h-4" />
-            <span>Chats</span>
-            {chats.length > 0 && (
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                  sidebarTab === "chats" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
-                }`}
-              >
-                {chats.length}
+            <IconChat className="w-5 h-5" />
+            {totalUnreadMessages > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#25d366] text-[#111b21] text-[10px] font-extrabold flex items-center justify-center shadow-xs">
+                {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
               </span>
             )}
           </button>
 
-          <button
-            onClick={() => setSidebarTab("status")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-semibold transition relative ${
-              sidebarTab === "status"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <IconStatus className="w-4 h-4" />
-            <span>Status</span>
-            {otherStatuses.some((s) => s.hasUnviewed) && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-white"></span>
-            )}
-          </button>
-
+          {/* 2. Calls Icon with Missed Badge */}
           <button
             onClick={() => setSidebarTab("calls")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-semibold transition ${
+            className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all ${
               sidebarTab === "calls"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                ? "bg-[#374248] text-[#00a884]"
+                : "text-[#aebac1] hover:text-white hover:bg-[#202c33]"
             }`}
+            title="Calls"
           >
-            <IconPhone className="w-4 h-4" />
-            <span>Calls</span>
-            {callLogs.length > 0 && (
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                  sidebarTab === "calls" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
-                }`}
-              >
-                {callLogs.length}
+            <IconPhone className="w-5 h-5" />
+            {missedCallsCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#25d366] text-[#111b21] text-[10px] font-extrabold flex items-center justify-center shadow-xs">
+                {missedCallsCount}
               </span>
             )}
+          </button>
+
+          {/* 3. Status Icon with Unviewed Green Dot */}
+          <button
+            onClick={() => setSidebarTab("status")}
+            className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all ${
+              sidebarTab === "status"
+                ? "bg-[#374248] text-[#00a884]"
+                : "text-[#aebac1] hover:text-white hover:bg-[#202c33]"
+            }`}
+            title="Status"
+          >
+            <IconStatus className="w-5 h-5" />
+            {otherStatuses.some((s) => s.hasUnviewed) && (
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-[#25d366] ring-2 ring-[#111b21]" />
+            )}
+          </button>
+
+          {/* 4. Channels / Broadcast Updates */}
+          <button
+            onClick={() => setSidebarTab("channels")}
+            className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all ${
+              sidebarTab === "channels"
+                ? "bg-[#374248] text-[#00a884]"
+                : "text-[#aebac1] hover:text-white hover:bg-[#202c33]"
+            }`}
+            title="Channels & Broadcasts"
+          >
+            <IconChannels className="w-5 h-5" />
+          </button>
+
+          {/* 5. Communities / Groups */}
+          <button
+            onClick={() => setSidebarTab("groups")}
+            className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all ${
+              sidebarTab === "groups"
+                ? "bg-[#374248] text-[#00a884]"
+                : "text-[#aebac1] hover:text-white hover:bg-[#202c33]"
+            }`}
+            title="Communities & Groups"
+          >
+            <IconUsers className="w-5 h-5" />
+          </button>
+
+          {/* Horizontal Divider */}
+          <div className="w-7 h-[1px] bg-[#222d34] my-1" />
+
+          {/* 6. Meta AI / Pulse AI Glowing Flower Icon */}
+          <button
+            onClick={handleOpenAIChat}
+            className="relative w-11 h-11 rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform"
+            title="Ask Pulse AI"
+          >
+            <IconMetaAI className="w-6 h-6 animate-pulse" />
           </button>
         </div>
 
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Bottom Rail Section */}
+        <div className="flex flex-col items-center gap-2.5 w-full">
+          {/* Media / Starred Gallery */}
+          <button
+            onClick={() => {
+              setSidebarTab("chats");
+              setChatFilter("favourites");
+            }}
+            className="w-11 h-11 rounded-full flex items-center justify-center text-[#aebac1] hover:text-white hover:bg-[#202c33] transition"
+            title="Starred & Media"
+          >
+            <IconMediaGallery className="w-5 h-5" />
+          </button>
+
+          {/* User Profile Avatar with WhatsApp-style Popup Menu */}
+          <div className="relative" ref={profileMenuRef}>
+            <button
+              onClick={() => setShowProfileMenu((prev) => !prev)}
+              className="relative group p-0.5 rounded-full border-2 border-transparent hover:border-[#00a884] transition"
+              title="Account & Profile Menu"
+            >
+              <img
+                src={
+                  userData?.avatar ||
+                  `https://api.dicebear.com/7.x/bottts/svg?seed=${userData?.username || "user"}`
+                }
+                alt={userData?.username}
+                className="w-9 h-9 rounded-full object-cover bg-[#202c33]"
+              />
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#25d366] border-2 border-[#111b21]" />
+            </button>
+
+            {/* Profile Popover Menu (WhatsApp-style) */}
+            {showProfileMenu && (
+              <div className="absolute left-full bottom-0 ml-3 w-64 bg-[#233138] border border-[#2e3b43] rounded-2xl shadow-2xl py-2 z-50 text-xs text-[#d1d7db] animate-fade-in backdrop-blur-md">
+                {/* User Info Header */}
+                <div className="px-4 py-2.5 border-b border-[#2e3b43] flex items-center gap-3">
+                  <img
+                    src={
+                      userData?.avatar ||
+                      `https://api.dicebear.com/7.x/bottts/svg?seed=${userData?.username || "user"}`
+                    }
+                    alt={userData?.username}
+                    className="w-10 h-10 rounded-full object-cover border border-[#2e3b43]"
+                  />
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-sm text-[#e9edef] truncate">
+                      {userData?.name || userData?.username}
+                    </h4>
+                    <p className="text-[11px] text-[#00a884] font-medium truncate">
+                      @{userData?.username} • Active
+                    </p>
+                  </div>
+                </div>
+
+                {/* Menu Options */}
+                <div className="py-1">
+                  <button
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      setShowMyProfileModal(true);
+                    }}
+                    className="w-full px-4 py-2.5 text-left hover:bg-[#182229] flex items-center gap-3 transition text-[#d1d7db] hover:text-white"
+                  >
+                    <IconUser className="w-4 h-4 text-[#8696a0]" />
+                    <span>Profile & Picture</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      setShowCreateGroupModal(true);
+                    }}
+                    className="w-full px-4 py-2.5 text-left hover:bg-[#182229] flex items-center gap-3 transition text-[#d1d7db] hover:text-white"
+                  >
+                    <IconUsers className="w-4 h-4 text-[#8696a0]" />
+                    <span>New Group</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      setShowNewChatModal(true);
+                    }}
+                    className="w-full px-4 py-2.5 text-left hover:bg-[#182229] flex items-center gap-3 transition text-[#d1d7db] hover:text-white"
+                  >
+                    <IconChatPlus className="w-4 h-4 text-[#8696a0]" />
+                    <span>New Chat</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      toggleSoundMute();
+                    }}
+                    className="w-full px-4 py-2.5 text-left hover:bg-[#182229] flex items-center justify-between transition text-[#d1d7db] hover:text-white"
+                  >
+                    <div className="flex items-center gap-3">
+                      {isMutedSounds ? (
+                        <IconVolumeX className="w-4 h-4 text-red-400" />
+                      ) : (
+                        <IconVolume2 className="w-4 h-4 text-[#00a884]" />
+                      )}
+                      <span>Sound Effects</span>
+                    </div>
+                    <span className="text-[10px] text-[#8696a0] font-mono">
+                      {isMutedSounds ? "Muted" : "On"}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      setSidebarTab("chats");
+                      setChatFilter("favourites");
+                    }}
+                    className="w-full px-4 py-2.5 text-left hover:bg-[#182229] flex items-center gap-3 transition text-[#d1d7db] hover:text-white"
+                  >
+                    <IconStar className="w-4 h-4 text-[#8696a0]" />
+                    <span>Starred Messages</span>
+                  </button>
+                </div>
+
+                {/* Logout Divider */}
+                <div className="border-t border-[#2e3b43] pt-1">
+                  <button
+                    onClick={() => {
+                      dispatch(clearUserData());
+                      navigate("/login");
+                    }}
+                    className="w-full px-4 py-2 text-left hover:bg-red-500/10 text-red-400 hover:text-red-300 flex items-center gap-3 transition"
+                  >
+                    <IconLogOut className="w-4 h-4" />
+                    <span>Log Out</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* 2. ADJACENT LIST PANEL (Chats, Status, Calls, Groups, Channels) */}
+      {/* ======================================================== */}
+      <div
+        className={`w-full md:w-[380px] lg:w-[410px] border-r border-[#222d34] flex flex-col bg-[#111b21] shadow-xl ${
+          selectedChat ? "hidden md:flex" : "flex"
+        } h-full z-10 transition-all overflow-hidden flex-shrink-0`}
+      >
         {/* TAB 1: CHATS VIEW */}
         {sidebarTab === "chats" && (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            {/* Search Input Filter */}
-            <div className="px-3 py-2 flex-shrink-0">
+            {/* Header: Title ("PulseChat"), 3-Dot Menu, and Circular "+ New Chat" Button (Screenshot 2) */}
+            <div className="px-4 py-3 flex items-center justify-between flex-shrink-0 bg-[#111b21] border-b border-[#222d34]">
+              <h2 className="text-xl font-bold text-[#e9edef] tracking-tight">PulseChat</h2>
+
+              <div className="flex items-center gap-2">
+                {/* 3-Dot Menu */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowChatMenu((prev) => !prev)}
+                    className="p-2 text-[#aebac1] hover:text-white rounded-full hover:bg-[#202c33] transition"
+                    title="Menu"
+                  >
+                    <IconDotsVertical className="w-5 h-5" />
+                  </button>
+
+                  {showChatMenu && (
+                    <div className="absolute right-0 top-full mt-2 w-52 bg-[#233138] border border-[#2e3b43] rounded-2xl shadow-2xl py-1.5 z-50 animate-fade-in text-xs text-[#d1d7db]">
+                      <button
+                        onClick={() => {
+                          setShowChatMenu(false);
+                          setShowCreateGroupModal(true);
+                        }}
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition"
+                      >
+                        <IconUsers className="w-4 h-4 text-[#8696a0]" />
+                        <span>New group</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowChatMenu(false);
+                          setSidebarTab("status");
+                        }}
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition"
+                      >
+                        <IconStatus className="w-4 h-4 text-[#8696a0]" />
+                        <span>Status updates</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowChatMenu(false);
+                          setSidebarTab("calls");
+                        }}
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition"
+                      >
+                        <IconPhone className="w-4 h-4 text-[#8696a0]" />
+                        <span>Call history</span>
+                      </button>
+                      <div className="my-1 border-t border-[#2e3b43]"></div>
+                      <button
+                        onClick={() => {
+                          setShowChatMenu(false);
+                          setShowMyProfileModal(true);
+                        }}
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition"
+                      >
+                        <IconUser className="w-4 h-4 text-[#8696a0]" />
+                        <span>Profile & Settings</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Green Circular "+ New Chat" Button (Exact match for Screenshot 2!) */}
+                <button
+                  onClick={() => setShowNewChatModal(true)}
+                  className="w-9 h-9 rounded-full bg-[#00a884] hover:bg-[#02906f] text-[#111b21] flex items-center justify-center transition shadow-md shadow-[#00a884]/25 hover:scale-105 active:scale-95"
+                  title="New chat"
+                >
+                  <IconChatPlus className="w-5 h-5 stroke-[2.4]" />
+                </button>
+              </div>
+            </div>
+
+            {/* Search Input Bar (Matching Screenshot 2) */}
+            <div className="px-3 pt-2.5 pb-2 flex-shrink-0">
               <div className="relative">
-                <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8696a0]" />
                 <input
                   type="text"
-                  placeholder="Search chats, contacts, messages..."
+                  placeholder="Search or start a new chat"
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-200/90 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
+                  className="w-full pl-9 pr-4 py-2 bg-[#202c33] border border-transparent focus:border-[#00a884]/40 rounded-lg text-xs text-[#e9edef] placeholder-[#8696a0] focus:outline-none transition"
                 />
               </div>
             </div>
 
-            {/* Chats List Header */}
-            <div className="px-4 pt-1 pb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 flex-shrink-0">
-              <span>Conversations</span>
-              <span className="text-slate-500 font-mono font-semibold">{chats.length}</span>
+            {/* Filter Pills Row (Matching Screenshot 2: All, Unread 1, Favourites, Groups, +) */}
+            <div className="px-3 pb-2.5 flex items-center gap-1.5 overflow-x-auto flex-shrink-0 no-scrollbar">
+              {/* All */}
+              <button
+                onClick={() => setChatFilter("all")}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition flex-shrink-0 ${
+                  chatFilter === "all"
+                    ? "bg-[#00a884]/20 text-[#00a884] border border-[#00a884]/40"
+                    : "bg-[#202c33] text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#2a3942]"
+                }`}
+              >
+                All
+              </button>
+
+              {/* Unread */}
+              <button
+                onClick={() => setChatFilter("unread")}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition flex-shrink-0 flex items-center gap-1.5 ${
+                  chatFilter === "unread"
+                    ? "bg-[#00a884]/20 text-[#00a884] border border-[#00a884]/40"
+                    : "bg-[#202c33] text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#2a3942]"
+                }`}
+              >
+                <span>Unread</span>
+                {totalUnreadMessages > 0 && (
+                  <span className="text-[10px] font-bold text-[#00a884]">
+                    {totalUnreadMessages}
+                  </span>
+                )}
+              </button>
+
+              {/* Favourites */}
+              <button
+                onClick={() => setChatFilter("favourites")}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition flex-shrink-0 ${
+                  chatFilter === "favourites"
+                    ? "bg-[#00a884]/20 text-[#00a884] border border-[#00a884]/40"
+                    : "bg-[#202c33] text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#2a3942]"
+                }`}
+              >
+                Favourites
+              </button>
+
+              {/* Groups */}
+              <button
+                onClick={() => setChatFilter("groups")}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition flex-shrink-0 ${
+                  chatFilter === "groups"
+                    ? "bg-[#00a884]/20 text-[#00a884] border border-[#00a884]/40"
+                    : "bg-[#202c33] text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#2a3942]"
+                }`}
+              >
+                Groups
+              </button>
+
+              {/* AI Bot */}
+              <button
+                onClick={() => setChatFilter("ai")}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition flex-shrink-0 flex items-center gap-1 ${
+                  chatFilter === "ai"
+                    ? "bg-[#00a884]/20 text-[#00a884] border border-[#00a884]/40"
+                    : "bg-[#202c33] text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#2a3942]"
+                }`}
+              >
+                <span>AI Bot</span>
+              </button>
+
+              {/* + Add New Conversation */}
+              <button
+                onClick={() => setShowNewChatModal(true)}
+                className="w-7 h-7 rounded-full bg-[#202c33] hover:bg-[#2a3942] text-[#8696a0] hover:text-white flex items-center justify-center text-sm font-bold flex-shrink-0 transition"
+                title="New conversation"
+              >
+                +
+              </button>
             </div>
 
-            {/* Chats List */}
-            <div className="flex-1 overflow-y-auto px-2.5 py-1 space-y-1">
-              {chats
-                .filter((c) => {
-                  if (!searchFilter.trim()) return true;
-                  const partner = getChatPartner(c);
-                  const q = searchFilter.toLowerCase();
-                  return (
-                    partner.username?.toLowerCase().includes(q) ||
-                    partner.name?.toLowerCase().includes(q) ||
-                    c.lastMessage?.toLowerCase().includes(q)
-                  );
-                })
-                .map((chat) => {
-                  const partner = getChatPartner(chat);
-                  const isSelected = selectedChat?._id === chat._id;
-                  const isOnline = chat.isAIChat
-                    ? true
-                    : chat.isGroup
-                    ? false
-                    : onlineUsers.has(String(partner._id));
+            {/* Conversation List */}
+            <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
+              {filteredChats.map((chat) => {
+                const partner = getChatPartner(chat);
+                const isSelected = selectedChat?._id === chat._id;
+                const isOnline = chat.isAIChat
+                  ? true
+                  : chat.isGroup
+                  ? false
+                  : onlineUsers.has(String(partner._id));
 
-                  // Compute unread message count
-                  const unreadCount = !chat.isAIChat
-                    ? chat.messages?.filter((m) => m.sender !== userData?.username && !m.seen).length || 0
-                    : 0;
+                // Compute unread message count
+                const unreadCount = !chat.isAIChat
+                  ? chat.messages?.filter((m) => m.sender !== userData?.username && !m.seen).length || 0
+                  : 0;
 
-                  return (
-                    <div
-                      key={chat._id}
-                      onClick={() => setSelectedChat(chat)}
-                      className={`group relative p-3 rounded-2xl cursor-pointer transition-all flex items-center gap-3.5 border ${
-                        isSelected
-                          ? "bg-blue-50/90 border-blue-200 text-slate-900 shadow-xs"
-                          : "hover:bg-slate-50 text-slate-700 border-transparent hover:border-slate-200/70"
-                      }`}
-                    >
-                      {/* Avatar with Status Ring */}
-                      <div className="relative flex-shrink-0">
-                        <img
-                          src={
-                            partner.avatar ||
-                            `https://api.dicebear.com/7.x/bottts/svg?seed=${partner.username || "user"}`
-                          }
-                          alt={partner.username}
-                          className="w-11 h-11 rounded-full object-cover border border-slate-200 group-hover:scale-105 transition"
-                        />
-                        {isOnline && (
-                          <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full shadow-xs"></span>
-                        )}
-                      </div>
+                return (
+                  <div
+                    key={chat._id}
+                    onClick={() => setSelectedChat(chat)}
+                    className={`group relative p-3 rounded-xl cursor-pointer transition-all flex items-center gap-3.5 border ${
+                      isSelected
+                        ? "bg-[#2a3942] border-[#00a884]/30 text-[#e9edef]"
+                        : "hover:bg-[#202c33] text-[#d1d7db] border-transparent"
+                    }`}
+                  >
+                    {/* Avatar with Status Ring */}
+                    <div className="relative flex-shrink-0">
+                      <img
+                        src={
+                          partner.avatar ||
+                          `https://api.dicebear.com/7.x/bottts/svg?seed=${partner.username || "user"}`
+                        }
+                        alt={partner.username}
+                        className="w-11 h-11 rounded-full object-cover border border-[#2e3b43] group-hover:scale-105 transition bg-[#202c33]"
+                      />
+                      {isOnline && (
+                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-[#25d366] border-2 border-[#111b21] rounded-full shadow-xs"></span>
+                      )}
+                    </div>
 
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-0.5">
-                          <div className="flex items-center gap-1.5 truncate">
-                            <span
-                              className={`font-semibold text-sm truncate ${
-                                isSelected ? "text-blue-900" : "text-slate-800"
-                              }`}
-                            >
-                              {partner.name || partner.username}
-                            </span>
-                            {chat.isAIChat && (
-                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-200">
-                                <IconSparkles className="w-2.5 h-2.5" /> AI
-                              </span>
-                            )}
-                            {chat.isGroup && (
-                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded border border-indigo-200">
-                                <IconUsers className="w-2.5 h-2.5" /> Group
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {chat.lastMessageAt
-                              ? new Date(chat.lastMessageAt).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
-                              : ""}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <p
-                            className={`text-xs truncate ${
-                              isSelected ? "text-blue-800/90 font-medium" : "text-slate-500"
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span
+                            className={`font-semibold text-sm truncate ${
+                              isSelected ? "text-[#e9edef]" : "text-[#d1d7db]"
                             }`}
                           >
-                            {chat.lastMessage || (chat.isGroup ? "Group created" : "No messages yet")}
-                          </p>
-
-                          {/* Unread message count badge */}
-                          {unreadCount > 0 && !isSelected && (
-                            <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-xs flex-shrink-0">
-                              {unreadCount}
+                            {partner.name || partner.username}
+                          </span>
+                          {chat.isAIChat && (
+                            <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 bg-[#a855f7]/20 text-[#c084fc] rounded border border-[#a855f7]/30">
+                              <IconSparkles className="w-2.5 h-2.5" /> AI
+                            </span>
+                          )}
+                          {chat.isGroup && (
+                            <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 bg-[#00a884]/20 text-[#00a884] rounded border border-[#00a884]/30">
+                              <IconUsers className="w-2.5 h-2.5" /> Group
                             </span>
                           )}
                         </div>
+                        <span className="text-[10px] text-[#8696a0] font-mono">
+                          {chat.lastMessageAt
+                            ? new Date(chat.lastMessageAt).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : ""}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <p
+                          className={`text-xs truncate ${
+                            isSelected ? "text-[#d1d7db]" : "text-[#8696a0]"
+                          }`}
+                        >
+                          {chat.lastMessage || (chat.isGroup ? "Group created" : "No messages yet")}
+                        </p>
+
+                        {/* Unread message count badge */}
+                        {unreadCount > 0 && !isSelected && (
+                          <span className="ml-2 px-2 py-0.5 rounded-full bg-[#25d366] text-[#111b21] text-[10px] font-extrabold shadow-xs flex-shrink-0">
+                            {unreadCount}
+                          </span>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
         {/* TAB 2: STATUS / STORY VIEW */}
         {sidebarTab === "status" && (
-          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+            {/* Header */}
+            <div className="px-1 flex items-center justify-between text-sm font-bold text-[#e9edef]">
+              <span>Status Updates</span>
+              <button
+                onClick={() => setShowCreateStatusModal(true)}
+                className="p-1.5 rounded-lg bg-[#202c33] text-[#00a884] hover:bg-[#2a3942] transition"
+                title="Add status"
+              >
+                <IconCamera className="w-4 h-4" />
+              </button>
+            </div>
+
             {/* My Status Card */}
-            <div className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/90 rounded-2xl transition flex items-center justify-between">
+            <div className="p-3 bg-[#202c33] hover:bg-[#2a3942] border border-[#2e3b43] rounded-2xl transition flex items-center justify-between">
               <div
                 onClick={() => {
                   if (myStatus && myStatus.statuses?.length > 0) {
@@ -1648,19 +1994,19 @@ export default function Home() {
                     alt={userData?.username}
                     className={`w-12 h-12 rounded-full object-cover border-2 p-0.5 transition ${
                       myStatus && myStatus.statuses?.length > 0
-                        ? "border-emerald-500 ring-2 ring-emerald-200"
-                        : "border-slate-200"
+                        ? "border-[#00a884] ring-2 ring-[#00a884]/40"
+                        : "border-[#2e3b43]"
                     }`}
                   />
                   {(!myStatus || myStatus.statuses?.length === 0) && (
-                    <span className="absolute bottom-0 right-0 w-4 h-4 bg-blue-600 text-white rounded-full flex items-center justify-center text-[11px] font-bold shadow-xs">
+                    <span className="absolute bottom-0 right-0 w-4 h-4 bg-[#00a884] text-[#111b21] rounded-full flex items-center justify-center text-[11px] font-extrabold shadow-xs">
                       +
                     </span>
                   )}
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-bold text-sm text-slate-800 truncate">My Status</h4>
-                  <p className="text-xs text-slate-500 truncate">
+                  <h4 className="font-bold text-sm text-[#e9edef] truncate">My Status</h4>
+                  <p className="text-xs text-[#8696a0] truncate">
                     {myStatus && myStatus.statuses?.length > 0
                       ? `${myStatus.statuses.length} update${myStatus.statuses.length > 1 ? "s" : ""} • Tap to view`
                       : "Tap to add status update"}
@@ -1671,7 +2017,7 @@ export default function Home() {
               {/* Quick add status button */}
               <button
                 onClick={() => setShowCreateStatusModal(true)}
-                className="p-2 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-600 border border-slate-200 rounded-xl transition shadow-xs"
+                className="p-2 bg-[#2a3942] hover:bg-[#374248] text-[#8696a0] hover:text-[#00a884] rounded-xl transition shadow-xs"
                 title="Add text or photo status"
               >
                 <IconCamera className="w-4 h-4" />
@@ -1679,23 +2025,23 @@ export default function Home() {
             </div>
 
             {/* Recent Updates Header */}
-            <div className="pt-2 px-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            <div className="pt-2 px-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#8696a0]">
               <span>Recent Updates</span>
-              <span className="text-slate-500 font-mono font-semibold">{otherStatuses.length}</span>
+              <span className="text-[#00a884] font-mono font-bold">{otherStatuses.length}</span>
             </div>
 
             {/* Contacts Status List */}
             {loadingStatuses ? (
-              <div className="py-8 text-center text-xs text-slate-400">Loading updates...</div>
+              <div className="py-8 text-center text-xs text-[#8696a0]">Loading updates...</div>
             ) : otherStatuses.length === 0 ? (
-              <div className="p-6 text-center bg-slate-50/70 border border-slate-200/60 rounded-2xl">
-                <p className="text-xs text-slate-600 font-medium">No recent updates</p>
-                <p className="text-[11px] text-slate-400 mt-1">
+              <div className="p-6 text-center bg-[#18222d] border border-[#222d34] rounded-2xl">
+                <p className="text-xs text-[#d1d7db] font-medium">No recent updates</p>
+                <p className="text-[11px] text-[#8696a0] mt-1">
                   Status updates from contacts will appear here and disappear after 24 hours.
                 </p>
                 <button
                   onClick={() => setShowCreateStatusModal(true)}
-                  className="mt-3 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition shadow-xs"
+                  className="mt-3 px-3.5 py-1.5 rounded-xl bg-[#00a884] hover:bg-[#02906f] text-[#111b21] text-xs font-bold transition shadow-xs"
                 >
                   Share an update
                 </button>
@@ -1715,7 +2061,7 @@ export default function Home() {
                           isOwn: false,
                         })
                       }
-                      className="p-2.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-200/80 flex items-center gap-3 cursor-pointer transition"
+                      className="p-2.5 rounded-2xl hover:bg-[#202c33] border border-transparent hover:border-[#2e3b43] flex items-center gap-3 cursor-pointer transition"
                     >
                       <div className="relative flex-shrink-0">
                         <img
@@ -1723,16 +2069,16 @@ export default function Home() {
                           alt={contact.username}
                           className={`w-11 h-11 rounded-full object-cover p-0.5 border-2 transition ${
                             item.hasUnviewed
-                              ? "border-emerald-500 ring-2 ring-emerald-300"
-                              : "border-slate-300"
+                              ? "border-[#25d366] ring-2 ring-[#25d366]/40"
+                              : "border-[#374248]"
                           }`}
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-sm text-slate-800 truncate">
+                        <h4 className="font-semibold text-sm text-[#e9edef] truncate">
                           {contact.name || contact.username}
                         </h4>
-                        <p className="text-xs text-slate-500 truncate flex items-center gap-1.5">
+                        <p className="text-xs text-[#8696a0] truncate flex items-center gap-1.5">
                           <span>
                             {item.statuses.length} update{item.statuses.length > 1 ? "s" : ""}
                           </span>
@@ -1741,7 +2087,7 @@ export default function Home() {
                         </p>
                       </div>
                       {item.hasUnviewed && (
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#25d366] ring-2 ring-[#111b21]"></span>
                       )}
                     </div>
                   );
@@ -1753,14 +2099,14 @@ export default function Home() {
 
         {/* TAB 3: CALL HISTORY VIEW */}
         {sidebarTab === "calls" && (
-          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
             {/* Header with clear history button */}
-            <div className="px-1 py-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            <div className="px-1 py-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#8696a0]">
               <span>Call History</span>
               {callLogs.length > 0 && (
                 <button
                   onClick={handleClearCallLogs}
-                  className="text-[11px] font-semibold text-red-500 hover:text-red-600 transition flex items-center gap-1"
+                  className="text-[11px] font-semibold text-red-400 hover:text-red-300 transition flex items-center gap-1"
                 >
                   <IconTrash className="w-3 h-3" />
                   <span>Clear</span>
@@ -1769,11 +2115,11 @@ export default function Home() {
             </div>
 
             {loadingCallLogs ? (
-              <div className="py-8 text-center text-xs text-slate-400">Loading call history...</div>
+              <div className="py-8 text-center text-xs text-[#8696a0]">Loading call history...</div>
             ) : callLogs.length === 0 ? (
-              <div className="p-6 text-center bg-slate-50/70 border border-slate-200/60 rounded-2xl">
-                <p className="text-xs text-slate-600 font-medium">No call logs yet</p>
-                <p className="text-[11px] text-slate-400 mt-1">
+              <div className="p-6 text-center bg-[#18222d] border border-[#222d34] rounded-2xl">
+                <p className="text-xs text-[#d1d7db] font-medium">No call logs yet</p>
+                <p className="text-[11px] text-[#8696a0] mt-1">
                   Calls made or received with your contacts will be saved here.
                 </p>
               </div>
@@ -1787,7 +2133,7 @@ export default function Home() {
                   return (
                     <div
                       key={log._id}
-                      className="p-2.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-200/80 flex items-center gap-3 transition group"
+                      className="p-2.5 rounded-2xl hover:bg-[#202c33] border border-transparent hover:border-[#2e3b43] flex items-center gap-3 transition group"
                     >
                       {/* Contact avatar */}
                       <img
@@ -1796,34 +2142,34 @@ export default function Home() {
                           `https://api.dicebear.com/7.x/bottts/svg?seed=${otherParty?.username || "call"}`
                         }
                         alt={otherParty?.username}
-                        className="w-11 h-11 rounded-full object-cover border border-slate-200"
+                        className="w-11 h-11 rounded-full object-cover border border-[#2e3b43]"
                       />
 
                       {/* Call Info */}
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-sm text-slate-800 truncate">
+                        <h4 className="font-semibold text-sm text-[#e9edef] truncate">
                           {otherParty?.name || otherParty?.username || "Contact"}
                         </h4>
                         <div className="flex items-center gap-1.5 text-xs mt-0.5">
                           {isCaller ? (
-                            <span className="flex items-center gap-1 text-blue-600">
+                            <span className="flex items-center gap-1 text-[#53bdeb]">
                               <IconArrowUpRight className="w-3.5 h-3.5" />
                               <span>Outgoing</span>
                             </span>
                           ) : isMissed ? (
-                            <span className="flex items-center gap-1 text-red-500 font-semibold">
+                            <span className="flex items-center gap-1 text-red-400 font-semibold">
                               <IconArrowDownLeft className="w-3.5 h-3.5" />
                               <span>Missed</span>
                             </span>
                           ) : (
-                            <span className="flex items-center gap-1 text-emerald-600">
+                            <span className="flex items-center gap-1 text-[#25d366]">
                               <IconArrowDownLeft className="w-3.5 h-3.5" />
                               <span>Incoming</span>
                             </span>
                           )}
 
-                          <span className="text-slate-400">•</span>
-                          <span className="text-slate-500 text-[11px]">
+                          <span className="text-[#8696a0]">•</span>
+                          <span className="text-[#8696a0] text-[11px]">
                             {log.duration > 0
                               ? formatCallDuration(log.duration)
                               : formatRelativeTime(log.createdAt)}
@@ -1835,14 +2181,14 @@ export default function Home() {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => handleCallbackUser(otherParty, "audio")}
-                          className="p-2 rounded-xl bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 border border-slate-200 hover:border-emerald-200 transition"
+                          className="p-2 rounded-xl bg-[#202c33] hover:bg-[#00a884]/20 text-[#8696a0] hover:text-[#00a884] border border-[#2e3b43] transition"
                           title="Audio call back"
                         >
                           <IconPhone className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleCallbackUser(otherParty, "video")}
-                          className="p-2 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 border border-slate-200 hover:border-blue-200 transition"
+                          className="p-2 rounded-xl bg-[#202c33] hover:bg-[#53bdeb]/20 text-[#8696a0] hover:text-[#53bdeb] border border-[#2e3b43] transition"
                           title="Video call back"
                         >
                           <IconVideo className="w-3.5 h-3.5" />
@@ -1855,20 +2201,134 @@ export default function Home() {
             )}
           </div>
         )}
+
+        {/* TAB 4: COMMUNITIES & GROUPS VIEW */}
+        {sidebarTab === "groups" && (
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+            {/* Create New Group Card */}
+            <div
+              onClick={() => setShowCreateGroupModal(true)}
+              className="p-3.5 bg-[#202c33] hover:bg-[#2a3942] border border-[#2e3b43] rounded-2xl transition cursor-pointer flex items-center gap-3.5 group"
+            >
+              <div className="w-12 h-12 rounded-xl bg-[#00a884]/20 text-[#00a884] flex items-center justify-center border border-[#00a884]/30 group-hover:scale-105 transition flex-shrink-0">
+                <IconUsers className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-bold text-sm text-[#e9edef] group-hover:text-[#00a884] transition">
+                  + Create New Group
+                </h4>
+                <p className="text-xs text-[#8696a0] truncate mt-0.5">
+                  Connect family, teams, and friends together
+                </p>
+              </div>
+            </div>
+
+            {/* Groups Section Header */}
+            <div className="pt-2 px-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#8696a0]">
+              <span>Your Groups</span>
+              <span className="text-[#00a884] font-mono font-bold">
+                {chats.filter((c) => c.isGroup).length}
+              </span>
+            </div>
+
+            {/* Group List */}
+            <div className="space-y-1">
+              {chats.filter((c) => c.isGroup).length === 0 ? (
+                <div className="p-6 text-center bg-[#18222d] border border-[#222d34] rounded-2xl">
+                  <p className="text-xs text-[#d1d7db] font-medium">No groups yet</p>
+                  <p className="text-[11px] text-[#8696a0] mt-1">
+                    Create a group to start chatting and sharing media with multiple people.
+                  </p>
+                  <button
+                    onClick={() => setShowCreateGroupModal(true)}
+                    className="mt-3 px-3.5 py-1.5 rounded-xl bg-[#00a884] hover:bg-[#02906f] text-[#111b21] text-xs font-bold transition shadow-xs"
+                  >
+                    Create Group
+                  </button>
+                </div>
+              ) : (
+                chats
+                  .filter((c) => c.isGroup)
+                  .map((chat) => (
+                    <div
+                      key={chat._id}
+                      onClick={() => {
+                        setSelectedChat(chat);
+                        setSidebarTab("chats");
+                      }}
+                      className="p-3 rounded-2xl hover:bg-[#202c33] border border-transparent hover:border-[#2e3b43] flex items-center gap-3.5 cursor-pointer transition group"
+                    >
+                      <img
+                        src={
+                          chat.groupAvatar ||
+                          `https://api.dicebear.com/7.x/identicon/svg?seed=${chat._id}`
+                        }
+                        alt={chat.groupName}
+                        className="w-11 h-11 rounded-full object-cover border border-[#2e3b43] group-hover:scale-105 transition"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-sm text-[#e9edef] truncate">
+                          {chat.groupName}
+                        </h4>
+                        <p className="text-xs text-[#8696a0] truncate mt-0.5">
+                          {chat.members?.length || 0} participants • {chat.lastMessage || "Group chat"}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: CHANNELS & BROADCAST VIEW */}
+        {sidebarTab === "channels" && (
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+            {/* Channels Header Card */}
+            <div className="p-4 bg-gradient-to-br from-teal-900/30 to-emerald-950/30 border border-emerald-800/30 rounded-2xl text-[#e9edef]">
+              <div className="flex items-center gap-2 mb-1.5">
+                <IconChannels className="w-5 h-5 text-[#00a884]" />
+                <h4 className="font-bold text-sm text-[#00a884]">Pulse Channels</h4>
+              </div>
+              <p className="text-xs text-[#8696a0] leading-relaxed">
+                Stay updated on topics you care about. Discover official channels, news, and broadcasts.
+              </p>
+            </div>
+
+            {/* Official Pulse Updates Channel */}
+            <div
+              onClick={handleOpenAIChat}
+              className="p-3 rounded-2xl bg-[#202c33] hover:bg-[#2a3942] border border-[#2e3b43] flex items-center gap-3.5 cursor-pointer transition group"
+            >
+              <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-pink-500 via-purple-600 to-indigo-600 flex items-center justify-center text-white flex-shrink-0 shadow-md">
+                <IconSparkles className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <h4 className="font-semibold text-sm text-[#e9edef] truncate">Pulse Official</h4>
+                  <span className="text-[10px] bg-[#00a884]/20 text-[#00a884] px-1.5 py-0.2 rounded font-bold">Verified</span>
+                </div>
+                <p className="text-xs text-[#8696a0] truncate mt-0.5">
+                  ⚡ Welcome to PulseChat 2.0 with Voice & Video Calls and 24h Stories!
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ======================================================== */}
-      {/* RIGHT MAIN AREA: Chat Conversation Screen */}
+      {/* 3. RIGHT MAIN AREA: Chat Screen OR Welcome Screen */}
       {/* ======================================================== */}
       <div
-        className={`flex-1 flex flex-col bg-[#f8fafc] h-full ${
+        className={`flex-1 flex flex-col bg-[#0b141a] h-full ${
           !selectedChat ? "hidden md:flex" : "flex"
         } relative overflow-hidden`}
       >
         {selectedChat ? (
           <>
             {/* Chat Top Header Bar */}
-            <div className="p-3 md:p-3.5 bg-white/95 border-b border-slate-200/90 backdrop-blur-xl flex items-center justify-between z-20 shadow-xs">
+            <div className="p-3 md:p-3.5 bg-[#202c33] border-b border-[#222d34] flex items-center justify-between z-20 shadow-sm">
               {/* Partner / Group Info (Click to open modal) */}
               <div
                 onClick={() => {
@@ -1895,7 +2355,7 @@ export default function Home() {
                     e.stopPropagation();
                     setSelectedChat(null);
                   }}
-                  className="md:hidden p-2 text-slate-500 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition -ml-1"
+                  className="md:hidden p-2 text-[#aebac1] hover:text-white rounded-xl hover:bg-[#374248] transition -ml-1"
                 >
                   ←
                 </button>
@@ -1907,63 +2367,63 @@ export default function Home() {
                       `https://api.dicebear.com/7.x/bottts/svg?seed=${currentPartner?.username || "user"}`
                     }
                     alt={currentPartner?.username}
-                    className="w-10 h-10 rounded-full object-cover border border-slate-200 group-hover:border-blue-500 transition shadow-xs"
+                    className="w-10 h-10 rounded-full object-cover border border-[#2e3b43] group-hover:border-[#00a884] transition shadow-xs bg-[#111b21]"
                   />
                   {!selectedChat.isGroup &&
                     (isPartnerOnline ? (
-                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full animate-pulse"></span>
+                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-[#25d366] border-2 border-[#202c33] rounded-full animate-pulse"></span>
                     ) : (
-                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-slate-400 border-2 border-white rounded-full"></span>
+                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-[#8696a0] border-2 border-[#202c33] rounded-full"></span>
                     ))}
                 </div>
 
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-sm md:text-base text-slate-900 truncate group-hover:text-blue-600 transition flex items-center gap-1.5">
+                    <h3 className="font-semibold text-sm md:text-base text-[#e9edef] truncate group-hover:text-[#00a884] transition flex items-center gap-1.5">
                       <span>{currentPartner?.name || currentPartner?.username}</span>
                       {mutedChats.has(selectedChat._id) && (
                         <span title="Notifications muted">
-                          <IconBellOff className="w-3.5 h-3.5 text-slate-400" />
+                          <IconBellOff className="w-3.5 h-3.5 text-[#8696a0]" />
                         </span>
                       )}
                       {selectedChat.isGroup && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-bold border border-indigo-200">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#00a884]/20 text-[#00a884] font-bold border border-[#00a884]/30">
                           Group
                         </span>
                       )}
                       {isContactBlockedByMe && !selectedChat.isGroup && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-bold border border-red-200">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-bold border border-red-500/30">
                           Blocked
                         </span>
                       )}
                       {!selectedChat.isAIChat && (
-                        <span className="text-[10px] text-slate-400 group-hover:text-blue-600 transition">
+                        <span className="text-[10px] text-[#8696a0] group-hover:text-[#00a884] transition">
                           ↗
                         </span>
                       )}
                     </h3>
                     {selectedChat.isAIChat && (
-                      <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold border border-blue-200">
+                      <span className="text-[10px] bg-[#a855f7]/20 text-[#c084fc] px-2 py-0.5 rounded-full font-bold border border-[#a855f7]/30">
                         Neural Bot
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500 truncate">
+                  <p className="text-[11px] text-[#8696a0] truncate">
                     {remoteTypingUser ? (
-                      <span className="text-blue-600 font-medium animate-pulse">
+                      <span className="text-[#00a884] font-medium animate-pulse">
                         ✍️ {remoteTypingUser} is typing...
                       </span>
                     ) : selectedChat.isGroup ? (
-                      <span className="text-slate-500 font-medium">
+                      <span className="text-[#8696a0] font-medium">
                         {selectedChat.members?.length || 0} participants • Tap for info
                       </span>
                     ) : isPartnerOnline ? (
-                      <span className="text-emerald-600 font-medium flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span className="text-[#25d366] font-medium flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#25d366] animate-pulse"></span>
                         Active Now
                       </span>
                     ) : (
-                      <span className="text-slate-500">
+                      <span className="text-[#8696a0]">
                         Last seen {formatRelativeTime(currentPartner?.lastSeen)}
                       </span>
                     )}
@@ -1980,8 +2440,8 @@ export default function Home() {
                       onClick={() => startCall("audio")}
                       className={`p-2 rounded-xl border transition shadow-xs ${
                         isContactBlockedByMe
-                          ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                          : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-200 hover:scale-105 active:scale-95"
+                          ? "bg-[#202c33] text-[#8696a0] border-[#2e3b43] cursor-not-allowed"
+                          : "bg-[#202c33] hover:bg-[#00a884]/20 text-[#aebac1] hover:text-[#00a884] border-[#2e3b43] hover:scale-105 active:scale-95"
                       }`}
                       title={isContactBlockedByMe ? "Unblock contact to call" : "Start Voice Call"}
                     >
@@ -1993,8 +2453,8 @@ export default function Home() {
                       onClick={() => startCall("video")}
                       className={`p-2 rounded-xl border transition shadow-xs ${
                         isContactBlockedByMe
-                          ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                          : "bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200 hover:scale-105 active:scale-95"
+                          ? "bg-[#202c33] text-[#8696a0] border-[#2e3b43] cursor-not-allowed"
+                          : "bg-[#202c33] hover:bg-[#53bdeb]/20 text-[#aebac1] hover:text-[#53bdeb] border-[#2e3b43] hover:scale-105 active:scale-95"
                       }`}
                       title={isContactBlockedByMe ? "Unblock contact to call" : "Start Video Call"}
                     >
@@ -2009,8 +2469,8 @@ export default function Home() {
                     onClick={() => setShowChatMenu((prev) => !prev)}
                     className={`p-2 rounded-xl border transition shadow-xs ${
                       showChatMenu
-                        ? "bg-blue-50 text-blue-600 border-blue-200 ring-2 ring-blue-100"
-                        : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80 border-slate-200"
+                        ? "bg-[#374248] text-white border-[#00a884]/40"
+                        : "bg-[#202c33] text-[#aebac1] hover:text-white hover:bg-[#374248] border-[#2e3b43]"
                     }`}
                     title="More options"
                   >
@@ -2019,7 +2479,7 @@ export default function Home() {
 
                   {/* Dropdown Popover */}
                   {showChatMenu && (
-                    <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200/90 rounded-2xl shadow-xl py-1.5 z-50 animate-fade-in text-xs font-medium text-slate-700">
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-[#233138] border border-[#2e3b43] rounded-2xl shadow-xl py-1.5 z-50 animate-fade-in text-xs font-medium text-[#d1d7db]">
                       {selectedChat.isGroup ? (
                         <>
                           {/* Group info */}
@@ -2028,9 +2488,9 @@ export default function Home() {
                               setShowChatMenu(false);
                               setShowGroupInfoModal(true);
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition text-[#d1d7db] hover:text-white"
                           >
-                            <IconInfo className="w-4 h-4 text-slate-500" />
+                            <IconInfo className="w-4 h-4 text-[#8696a0]" />
                             <span>Group info</span>
                           </button>
 
@@ -2040,9 +2500,9 @@ export default function Home() {
                               setShowChatMenu(false);
                               setSearchInChatOpen((prev) => !prev);
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition text-[#d1d7db] hover:text-white"
                           >
-                            <IconSearch className="w-4 h-4 text-slate-500" />
+                            <IconSearch className="w-4 h-4 text-[#8696a0]" />
                             <span>Search in conversation</span>
                           </button>
 
@@ -2052,22 +2512,22 @@ export default function Home() {
                               handleToggleMuteChat(selectedChat._id);
                               setShowChatMenu(false);
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition text-[#d1d7db] hover:text-white"
                           >
                             {mutedChats.has(selectedChat._id) ? (
                               <>
-                                <IconBell className="w-4 h-4 text-slate-500" />
+                                <IconBell className="w-4 h-4 text-[#8696a0]" />
                                 <span>Unmute notifications</span>
                               </>
                             ) : (
                               <>
-                                <IconBellOff className="w-4 h-4 text-slate-500" />
+                                <IconBellOff className="w-4 h-4 text-[#8696a0]" />
                                 <span>Mute notifications</span>
                               </>
                             )}
                           </button>
 
-                          <div className="my-1 border-t border-slate-100"></div>
+                          <div className="my-1 border-t border-[#2e3b43]"></div>
 
                           {/* Clear chat history */}
                           <button
@@ -2077,9 +2537,9 @@ export default function Home() {
                                 handleClearChatHistory();
                               }
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition text-[#d1d7db] hover:text-white"
                           >
-                            <IconTrash className="w-4 h-4 text-slate-400" />
+                            <IconTrash className="w-4 h-4 text-[#8696a0]" />
                             <span>Clear chat history</span>
                           </button>
 
@@ -2089,9 +2549,9 @@ export default function Home() {
                               setShowChatMenu(false);
                               handleLeaveGroup();
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-red-50 flex items-center gap-2.5 transition text-red-600 font-medium"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-red-500/10 flex items-center gap-2.5 transition text-red-400 font-medium"
                           >
-                            <IconLogOut className="w-4 h-4 text-red-500" />
+                            <IconLogOut className="w-4 h-4 text-red-400" />
                             <span>Exit group</span>
                           </button>
                         </>
@@ -2104,9 +2564,9 @@ export default function Home() {
                               setProfileModalTab("photos");
                               setShowProfileModal(true);
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition text-[#d1d7db] hover:text-white"
                           >
-                            <IconUser className="w-4 h-4 text-slate-500" />
+                            <IconUser className="w-4 h-4 text-[#8696a0]" />
                             <span>Contact info</span>
                           </button>
 
@@ -2117,9 +2577,9 @@ export default function Home() {
                               setProfileModalTab("photos");
                               setShowProfileModal(true);
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition text-[#d1d7db] hover:text-white"
                           >
-                            <IconCamera className="w-4 h-4 text-slate-500" />
+                            <IconCamera className="w-4 h-4 text-[#8696a0]" />
                             <span>Media, links and docs</span>
                           </button>
 
@@ -2129,9 +2589,9 @@ export default function Home() {
                               setShowChatMenu(false);
                               setSearchInChatOpen((prev) => !prev);
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition text-[#d1d7db] hover:text-white"
                           >
-                            <IconSearch className="w-4 h-4 text-slate-500" />
+                            <IconSearch className="w-4 h-4 text-[#8696a0]" />
                             <span>Search in conversation</span>
                           </button>
 
@@ -2141,22 +2601,22 @@ export default function Home() {
                               handleToggleMuteChat(selectedChat._id);
                               setShowChatMenu(false);
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition text-[#d1d7db] hover:text-white"
                           >
                             {mutedChats.has(selectedChat._id) ? (
                               <>
-                                <IconBell className="w-4 h-4 text-slate-500" />
+                                <IconBell className="w-4 h-4 text-[#8696a0]" />
                                 <span>Unmute notifications</span>
                               </>
                             ) : (
                               <>
-                                <IconBellOff className="w-4 h-4 text-slate-500" />
+                                <IconBellOff className="w-4 h-4 text-[#8696a0]" />
                                 <span>Mute notifications</span>
                               </>
                             )}
                           </button>
 
-                          <div className="my-1 border-t border-slate-100"></div>
+                          <div className="my-1 border-t border-[#2e3b43]"></div>
 
                           {/* 5. Clear chat */}
                           <button
@@ -2166,9 +2626,9 @@ export default function Home() {
                                 handleClearChatHistory();
                               }
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition text-[#d1d7db] hover:text-white"
                           >
-                            <IconTrash className="w-4 h-4 text-slate-400" />
+                            <IconTrash className="w-4 h-4 text-[#8696a0]" />
                             <span>Clear chat history</span>
                           </button>
 
@@ -2178,11 +2638,11 @@ export default function Home() {
                               setShowChatMenu(false);
                               handleToggleBlockContact();
                             }}
-                            className={`w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition ${
-                              isContactBlockedByMe ? "text-emerald-600 font-semibold" : "text-slate-700"
+                            className={`w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition ${
+                              isContactBlockedByMe ? "text-[#00a884] font-semibold" : "text-[#d1d7db]"
                             }`}
                           >
-                            <IconBan className={`w-4 h-4 ${isContactBlockedByMe ? "text-emerald-600" : "text-red-500"}`} />
+                            <IconBan className={`w-4 h-4 ${isContactBlockedByMe ? "text-[#00a884]" : "text-red-400"}`} />
                             <span>{isContactBlockedByMe ? "Unblock contact" : "Block contact"}</span>
                           </button>
 
@@ -2192,9 +2652,9 @@ export default function Home() {
                               setShowChatMenu(false);
                               handleDeleteChat();
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-red-50 flex items-center gap-2.5 transition text-red-600 font-medium"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-red-500/10 flex items-center gap-2.5 transition text-red-400 font-medium"
                           >
-                            <IconTrash className="w-4 h-4 text-red-500" />
+                            <IconTrash className="w-4 h-4 text-red-400" />
                             <span>Delete conversation</span>
                           </button>
                         </>
@@ -2205,9 +2665,9 @@ export default function Home() {
                               setShowChatMenu(false);
                               setSearchInChatOpen((prev) => !prev);
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition text-[#d1d7db] hover:text-white"
                           >
-                            <IconSearch className="w-4 h-4 text-slate-500" />
+                            <IconSearch className="w-4 h-4 text-[#8696a0]" />
                             <span>Search in conversation</span>
                           </button>
 
@@ -2216,9 +2676,9 @@ export default function Home() {
                               setShowChatMenu(false);
                               handleClearChatHistory();
                             }}
-                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#182229] flex items-center gap-2.5 transition text-[#d1d7db] hover:text-white"
                           >
-                            <IconTrash className="w-4 h-4 text-slate-400" />
+                            <IconTrash className="w-4 h-4 text-[#8696a0]" />
                             <span>Clear conversation</span>
                           </button>
                         </>
@@ -2231,18 +2691,18 @@ export default function Home() {
 
             {/* IN-CHAT MESSAGE SEARCH BAR (WhatsApp-style) */}
             {searchInChatOpen && (
-              <div className="bg-white border-b border-slate-200/90 px-4 py-2 flex items-center gap-3 backdrop-blur-md shadow-xs z-20 animate-fade-in">
-                <IconSearch className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              <div className="bg-[#202c33] border-b border-[#222d34] px-4 py-2 flex items-center gap-3 backdrop-blur-md shadow-xs z-20 animate-fade-in">
+                <IconSearch className="w-4 h-4 text-[#8696a0] flex-shrink-0" />
                 <input
                   type="text"
                   placeholder="Search in conversation..."
                   value={chatSearchQuery}
                   onChange={(e) => setChatSearchQuery(e.target.value)}
                   autoFocus
-                  className="flex-1 bg-slate-100/90 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white transition"
+                  className="flex-1 bg-[#111b21] border border-[#2e3b43] rounded-xl px-3 py-1.5 text-xs text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#00a884]/40 transition"
                 />
                 {chatSearchQuery && (
-                  <span className="text-[11px] font-semibold text-slate-500 font-mono">
+                  <span className="text-[11px] font-semibold text-[#8696a0] font-mono">
                     {matchingChatMessagesCount} {matchingChatMessagesCount === 1 ? "match" : "matches"}
                   </span>
                 )}
@@ -2251,7 +2711,7 @@ export default function Home() {
                     setSearchInChatOpen(false);
                     setChatSearchQuery("");
                   }}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                  className="p-1 rounded-lg text-[#8696a0] hover:text-white hover:bg-[#374248] transition"
                   title="Close search"
                 >
                   <IconClose className="w-4 h-4" />
@@ -2261,21 +2721,21 @@ export default function Home() {
 
             {/* BLOCKED CONTACT WARNING BANNER WITH INSTANT UNBLOCK */}
             {isContactBlockedByMe && (
-              <div className="bg-red-50 border-b border-red-200 px-4 py-2.5 flex items-center justify-between text-xs text-red-700 z-20 backdrop-blur-md animate-fade-in shadow-xs">
+              <div className="bg-red-900/30 border-b border-red-800/40 px-4 py-2.5 flex items-center justify-between text-xs text-red-300 z-20 backdrop-blur-md animate-fade-in shadow-xs">
                 <div className="flex items-center gap-2 min-w-0">
-                  <IconBan className="w-4 h-4 text-red-500 flex-shrink-0" />
+                  <IconBan className="w-4 h-4 text-red-400 flex-shrink-0" />
                   <span className="truncate font-medium">You have blocked this contact. They cannot message or call you.</span>
                 </div>
                 <button
                   onClick={handleToggleBlockContact}
-                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-sm hover:scale-105 active:scale-95 flex-shrink-0 ml-2"
+                  className="px-3.5 py-1.5 rounded-xl bg-[#00a884] hover:bg-[#02906f] text-[#111b21] font-bold text-xs transition shadow-sm hover:scale-105 active:scale-95 flex-shrink-0 ml-2"
                 >
                   Unblock Contact
                 </button>
               </div>
             )}
 
-            {/* LIVE ACTIVE CALL BANNER (Appears when call is minimized or ongoing) */}
+            {/* LIVE ACTIVE CALL BANNER */}
             {(callState === "in-call" || callState === "outgoing") && (
               <div
                 onClick={() => setIsCallMinimized(false)}
@@ -2304,7 +2764,7 @@ export default function Home() {
             )}
 
             {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 bg-[#0b141a]">
               {selectedChat.messages?.map((msg, idx) => {
                 const isSender = msg.sender === userData.username;
                 const isSystem = msg.system || msg.mediaType === "system" || msg.sender === "System";
@@ -2319,10 +2779,10 @@ export default function Home() {
                             setIsCallMinimized(false);
                           }
                         }}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200/90 text-xs text-slate-700 font-medium shadow-xs hover:bg-slate-50 transition cursor-pointer select-none"
+                        className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#18222d] border border-[#222d34] text-xs text-[#8696a0] font-medium shadow-xs hover:bg-[#202c33] transition cursor-pointer select-none"
                       >
                         <span>{msg.text}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">
+                        <span className="text-[10px] text-[#8696a0] font-mono">
                           {msg.createdAt
                             ? new Date(msg.createdAt).toLocaleTimeString([], {
                                 hour: "2-digit",
@@ -2341,22 +2801,22 @@ export default function Home() {
                     className={`flex flex-col ${isSender ? "items-end" : "items-start"} group relative`}
                   >
                     <div
-                      className={`relative max-w-[85%] md:max-w-[70%] rounded-2xl p-3.5 px-4 transition-all ${
+                      className={`relative max-w-[85%] md:max-w-[70%] rounded-2xl p-3 px-4 transition-all ${
                         isSender
-                          ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-br-xs shadow-md shadow-blue-500/15"
-                          : "bg-white border border-slate-200/90 text-slate-800 rounded-bl-xs shadow-xs"
+                          ? "bg-[#005c4b] text-[#e9edef] rounded-br-xs shadow-md shadow-black/20"
+                          : "bg-[#202c33] border border-[#2e3b43] text-[#e9edef] rounded-bl-xs shadow-xs"
                       }`}
                     >
                       {/* Sender label in received mode */}
                       {!isSender && (
-                        <p className="text-[11px] font-bold text-blue-600 mb-1">
+                        <p className="text-[11px] font-bold text-[#00a884] mb-1">
                           {msg.sender}
                         </p>
                       )}
 
                       {/* Image Attachment */}
                       {msg.mediaType === "image" && msg.mediaUrl && (
-                        <div className="my-1 rounded-xl overflow-hidden cursor-pointer border border-slate-200/80">
+                        <div className="my-1 rounded-xl overflow-hidden cursor-pointer border border-white/10">
                           <img
                             src={getMediaUrl(msg.mediaUrl)}
                             alt="Attached"
@@ -2379,14 +2839,14 @@ export default function Home() {
                           rel="noreferrer"
                           className={`flex items-center gap-3 p-2.5 my-1 rounded-xl transition text-xs border ${
                             isSender
-                              ? "bg-white/15 hover:bg-white/25 border-white/20 text-white"
-                              : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800"
+                              ? "bg-white/10 hover:bg-white/15 border-white/20 text-[#e9edef]"
+                              : "bg-[#111b21] hover:bg-[#182229] border-[#2e3b43] text-[#e9edef]"
                           }`}
                         >
-                          <IconPaperclip className={`w-5 h-5 ${isSender ? "text-blue-100" : "text-blue-600"}`} />
+                          <IconPaperclip className={`w-5 h-5 ${isSender ? "text-emerald-200" : "text-[#00a884]"}`} />
                           <div className="flex-1 truncate">
                             <p className="font-semibold truncate">{msg.fileName || msg.text || "File"}</p>
-                            <span className={`text-[10px] ${isSender ? "text-blue-200" : "text-slate-400"}`}>
+                            <span className={`text-[10px] ${isSender ? "text-emerald-200/80" : "text-[#8696a0]"}`}>
                               {msg.fileSize || "Attachment"}
                             </span>
                           </div>
@@ -2405,7 +2865,7 @@ export default function Home() {
                       {/* Message Metadata (Time & Delivery/Seen Status) */}
                       <div
                         className={`flex items-center justify-end gap-1.5 mt-1 text-[10px] select-none ${
-                          isSender ? "text-blue-100" : "text-slate-400"
+                          isSender ? "text-emerald-200/80" : "text-[#8696a0]"
                         }`}
                       >
                         <span className="opacity-80">
@@ -2423,17 +2883,17 @@ export default function Home() {
                             {msg.seen ? (
                               <>
                                 {idx === lastSentMsgIndex && (
-                                  <span className="text-[9px] text-sky-200 font-semibold tracking-tight">
+                                  <span className="text-[9px] text-[#53bdeb] font-semibold tracking-tight">
                                     {msg.seenAt ? `Seen ${formatRelativeTime(msg.seenAt)}` : "Seen"}
                                   </span>
                                 )}
                                 <span title={msg.seenAt ? `Seen ${formatRelativeTime(msg.seenAt)}` : "Seen"}>
-                                  <IconCheckDouble className="w-3.5 h-3.5 text-sky-200 stroke-[2.5]" />
+                                  <IconCheckDouble className="w-3.5 h-3.5 text-[#53bdeb] stroke-[2.5]" />
                                 </span>
                               </>
                             ) : (
                               <span title="Delivered">
-                                <IconCheckDouble className="w-3.5 h-3.5 text-white/60" />
+                                <IconCheckDouble className="w-3.5 h-3.5 text-[#8696a0]" />
                               </span>
                             )}
                           </div>
@@ -2449,10 +2909,10 @@ export default function Home() {
                               <button
                                 key={rIdx}
                                 onClick={() => handleReaction(msg._id, emoji)}
-                                className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white border border-slate-200 shadow-xs hover:bg-slate-50 text-slate-800 transition"
+                                className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#182229] border border-[#2e3b43] shadow-xs hover:bg-[#202c33] text-[#e9edef] transition"
                               >
                                 <span>{emoji}</span>
-                                <span className="font-mono text-[10px] font-bold text-slate-600">{count}</span>
+                                <span className="font-mono text-[10px] font-bold text-[#8696a0]">{count}</span>
                               </button>
                             );
                           })}
@@ -2465,7 +2925,7 @@ export default function Home() {
                       <div
                         className={`absolute -top-7 ${
                           isSender ? "right-2" : "left-2"
-                        } hidden group-hover:flex items-center gap-1 bg-white border border-slate-200 rounded-full px-2 py-1 shadow-lg z-20`}
+                        } hidden group-hover:flex items-center gap-1 bg-[#233138] border border-[#2e3b43] rounded-full px-2 py-1 shadow-lg z-20`}
                       >
                         {["❤️", "👍", "😂", "🔥", "😮", "👏"].map((emoji) => (
                           <button
@@ -2485,7 +2945,7 @@ export default function Home() {
                               setCopiedMsgId(msg._id);
                               setTimeout(() => setCopiedMsgId(null), 1500);
                             }}
-                            className="p-1 text-slate-400 hover:text-slate-700 transition"
+                            className="p-1 text-[#8696a0] hover:text-white transition"
                             title={copiedMsgId === msg._id ? "Copied!" : "Copy message"}
                           >
                             <IconCopy className="w-3.5 h-3.5" />
@@ -2496,7 +2956,7 @@ export default function Home() {
                         {isSender && (
                           <button
                             onClick={() => handleDeleteMessage(msg._id)}
-                            className="p-1 text-slate-400 hover:text-red-500 transition"
+                            className="p-1 text-[#8696a0] hover:text-red-400 transition"
                             title="Delete Message"
                           >
                             <IconTrash className="w-3.5 h-3.5" />
@@ -2512,15 +2972,15 @@ export default function Home() {
             </div>
 
             {/* Chat Bottom Input Bar */}
-            <div className="relative p-3 md:p-3.5 bg-white/95 border-t border-slate-200/90 backdrop-blur-xl shadow-xs">
+            <div className="relative p-3 md:p-3.5 bg-[#202c33] border-t border-[#222d34] shadow-xs">
               {/* If user is blocked */}
               {isContactBlockedByMe ? (
-                <div className="flex items-center justify-center gap-3 py-3 px-4 text-xs text-slate-600 bg-slate-100 rounded-xl border border-slate-200">
-                  <IconBan className="w-4 h-4 text-red-500" />
+                <div className="flex items-center justify-center gap-3 py-3 px-4 text-xs text-[#8696a0] bg-[#111b21] rounded-xl border border-[#2e3b43]">
+                  <IconBan className="w-4 h-4 text-red-400" />
                   <span>You have blocked this contact.</span>
                   <button
                     onClick={handleToggleBlockContact}
-                    className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition hover:scale-105 active:scale-95 ml-2 shadow-xs"
+                    className="px-3.5 py-1.5 rounded-lg bg-[#00a884] hover:bg-[#02906f] text-[#111b21] font-bold transition hover:scale-105 active:scale-95 ml-2 shadow-xs"
                   >
                     Unblock to Chat
                   </button>
@@ -2549,13 +3009,13 @@ export default function Home() {
                       {/* Emoji toggle */}
                       <button
                         onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                        className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
+                        className="p-2 rounded-xl text-[#8696a0] hover:text-white hover:bg-[#374248] transition"
                         title="Emojis"
                       >
                         <IconSmile className="w-5 h-5" />
                       </button>
 
-                      {/* Attachment toggle (hidden file input) */}
+                      {/* Attachment toggle */}
                       <input
                         type="file"
                         ref={fileInputRef}
@@ -2564,7 +3024,7 @@ export default function Home() {
                       />
                       <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
+                        className="p-2 rounded-xl text-[#8696a0] hover:text-white hover:bg-[#374248] transition"
                         title="Send Photo or Document"
                       >
                         <IconPaperclip className="w-5 h-5" />
@@ -2579,16 +3039,16 @@ export default function Home() {
                         placeholder={
                           selectedChat.isAIChat
                             ? "Ask Pulse AI anything..."
-                            : "Type your message..."
+                            : "Type a message"
                         }
-                        className="flex-1 bg-slate-100/90 border border-slate-200/90 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 transition"
+                        className="flex-1 bg-[#2a3942] border border-transparent focus:border-[#00a884]/40 rounded-xl px-4 py-2.5 text-sm text-[#e9edef] placeholder-[#8696a0] focus:outline-none transition"
                       />
 
                       {/* Mic / Voice Recording Button */}
                       {!messageText.trim() ? (
                         <button
                           onClick={() => setIsRecordingVoice(true)}
-                          className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-600 hover:text-slate-900 border border-slate-200 transition"
+                          className="p-2.5 rounded-xl bg-[#2a3942] hover:bg-[#374248] text-[#8696a0] hover:text-white transition"
                           title="Record Voice Note"
                         >
                           <IconMic className="w-5 h-5" />
@@ -2597,7 +3057,7 @@ export default function Home() {
                         /* Send Button */
                         <button
                           onClick={handleSendMessage}
-                          className="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/25 transition transform hover:scale-105 active:scale-95"
+                          className="p-2.5 rounded-xl bg-[#00a884] hover:bg-[#02906f] text-[#111b21] shadow-md shadow-[#00a884]/25 transition transform hover:scale-105 active:scale-95"
                           title="Send"
                         >
                           <IconSend className="w-5 h-5" />
@@ -2610,39 +3070,106 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* Empty Chat State - Clean Natural Modern Graphic */
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center z-10 bg-[#f8fafc]">
-            <div className="relative mb-6">
-              <div className="absolute -inset-4 bg-blue-500/10 rounded-full blur-2xl opacity-60"></div>
-              <Logo size="xl" showTag={false} className="relative opacity-95" />
+          /* ======================================================== */
+          /* WELCOME / EMPTY CHAT SCREEN (Matching Screenshot 3!) */
+          /* ======================================================== */
+          <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-10 text-center z-10 bg-[#111b21] select-none">
+            {/* Central Card (Screenshot 3) */}
+            <div className="w-full max-w-sm md:max-w-md bg-[#18222d] border border-[#222d34] rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col items-center text-center">
+              {/* Calling Illustration with Laptop & Green Phone Icon */}
+              <div className="w-24 h-24 mb-5 relative flex items-center justify-center">
+                {/* Laptop base */}
+                <div className="w-20 h-14 bg-[#2a3942] border-2 border-[#8696a0]/40 rounded-lg flex items-center justify-center p-1.5 shadow-lg relative">
+                  <div className="w-full h-full bg-[#00a884] rounded-md flex items-center justify-center shadow-inner">
+                    <IconPhone className="w-6 h-6 text-[#111b21] animate-pulse" />
+                  </div>
+                </div>
+                <div className="absolute bottom-1 w-24 h-1.5 bg-[#8696a0]/60 rounded-full"></div>
+              </div>
+
+              {/* Title & Subtitle */}
+              <h3 className="text-xl md:text-2xl font-bold text-[#e9edef] mb-2 tracking-tight">
+                Voice and video calling is now available
+              </h3>
+              <p className="text-[#8696a0] text-xs md:text-sm max-w-xs mb-6 leading-relaxed">
+                Now you can make and join calls on PulseChat Web.
+              </p>
+
+              {/* Go to Calls Button */}
+              <button
+                onClick={() => setSidebarTab("calls")}
+                className="px-6 py-2.5 rounded-full bg-[#00a884] hover:bg-[#02906f] text-[#111b21] font-bold text-xs tracking-wide shadow-lg shadow-[#00a884]/20 hover:scale-105 active:scale-95 transition"
+              >
+                Go to Calls
+              </button>
             </div>
 
-            <h3 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-2.5 tracking-tight">
-              Welcome to Pulse<span className="text-blue-600">Chat</span>
-            </h3>
-
-            <p className="text-slate-500 text-sm max-w-md mb-6 leading-relaxed">
-              Experience fast, secure realtime messaging, crystal-clear voice and HD video calling, voice notes, and smart AI assistance.
-            </p>
-
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <button
+            {/* Bottom 5 Quick Action Circles (Matching Screenshot 3!) */}
+            <div className="mt-10 md:mt-12 flex items-center justify-center gap-4 md:gap-7 flex-wrap">
+              {/* 1. Send document */}
+              <div
                 onClick={() => setShowNewChatModal(true)}
-                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs tracking-wide shadow-md shadow-blue-600/20 hover:scale-105 active:scale-95 transition"
+                className="flex flex-col items-center gap-2 cursor-pointer group"
               >
-                + New Conversation
-              </button>
+                <div className="w-12 h-12 rounded-full bg-[#202c33] group-hover:bg-[#2a3942] border border-[#2e3b43] group-hover:border-[#00a884]/40 flex items-center justify-center text-[#e9edef] shadow-md group-hover:scale-110 transition">
+                  <IconFileText className="w-5 h-5 text-[#8696a0] group-hover:text-[#00a884]" />
+                </div>
+                <span className="text-[11px] text-[#8696a0] group-hover:text-[#e9edef] transition font-medium">
+                  Send document
+                </span>
+              </div>
 
-              <button
-                onClick={() => {
-                  const ai = chats.find((c) => c.isAIChat);
-                  if (ai) setSelectedChat(ai);
-                }}
-                className="px-5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-xs tracking-wide hover:scale-105 active:scale-95 transition flex items-center gap-2 shadow-xs"
+              {/* 2. Add contact */}
+              <div
+                onClick={() => setShowNewChatModal(true)}
+                className="flex flex-col items-center gap-2 cursor-pointer group"
               >
-                <IconSparkles className="w-4 h-4 text-blue-600" />
-                <span>Talk to Pulse AI</span>
-              </button>
+                <div className="w-12 h-12 rounded-full bg-[#202c33] group-hover:bg-[#2a3942] border border-[#2e3b43] group-hover:border-[#00a884]/40 flex items-center justify-center text-[#e9edef] shadow-md group-hover:scale-110 transition">
+                  <IconUserPlus className="w-5 h-5 text-[#8696a0] group-hover:text-[#00a884]" />
+                </div>
+                <span className="text-[11px] text-[#8696a0] group-hover:text-[#e9edef] transition font-medium">
+                  Add contact
+                </span>
+              </div>
+
+              {/* 3. Invite a friend */}
+              <div
+                onClick={handleInviteFriend}
+                className="flex flex-col items-center gap-2 cursor-pointer group"
+              >
+                <div className="w-12 h-12 rounded-full bg-[#202c33] group-hover:bg-[#2a3942] border border-[#2e3b43] group-hover:border-[#00a884]/40 flex items-center justify-center text-[#e9edef] shadow-md group-hover:scale-110 transition">
+                  <IconMail className="w-5 h-5 text-[#8696a0] group-hover:text-[#00a884]" />
+                </div>
+                <span className="text-[11px] text-[#8696a0] group-hover:text-[#e9edef] transition font-medium">
+                  Invite a friend
+                </span>
+              </div>
+
+              {/* 4. New call */}
+              <div
+                onClick={() => setSidebarTab("calls")}
+                className="flex flex-col items-center gap-2 cursor-pointer group"
+              >
+                <div className="w-12 h-12 rounded-full bg-[#202c33] group-hover:bg-[#2a3942] border border-[#2e3b43] group-hover:border-[#00a884]/40 flex items-center justify-center text-[#e9edef] shadow-md group-hover:scale-110 transition">
+                  <IconVideo className="w-5 h-5 text-[#8696a0] group-hover:text-[#00a884]" />
+                </div>
+                <span className="text-[11px] text-[#8696a0] group-hover:text-[#e9edef] transition font-medium">
+                  New call
+                </span>
+              </div>
+
+              {/* 5. Ask Pulse AI */}
+              <div
+                onClick={handleOpenAIChat}
+                className="flex flex-col items-center gap-2 cursor-pointer group"
+              >
+                <div className="w-12 h-12 rounded-full bg-[#202c33] group-hover:bg-[#2a3942] border border-[#2e3b43] group-hover:border-[#a855f7]/40 flex items-center justify-center text-[#e9edef] shadow-md group-hover:scale-110 transition">
+                  <IconMetaAI className="w-6 h-6 animate-pulse" />
+                </div>
+                <span className="text-[11px] text-[#8696a0] group-hover:text-[#e9edef] transition font-medium">
+                  Ask Pulse AI
+                </span>
+              </div>
             </div>
           </div>
         )}
@@ -2709,13 +3236,13 @@ export default function Home() {
       {/* 6. NEW CHAT SEARCH MODAL */}
       {/* ======================================================== */}
       {showNewChatModal && (
-        <div className="fixed inset-0 z-[120] bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh] text-slate-900">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-200 mb-4">
-              <h3 className="text-base font-bold text-slate-900">Start New Conversation</h3>
+        <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#202c33] border border-[#2e3b43] rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh] text-[#e9edef]">
+            <div className="flex items-center justify-between pb-4 border-b border-[#2e3b43] mb-4">
+              <h3 className="text-base font-bold text-[#e9edef]">Start New Conversation</h3>
               <button
                 onClick={() => setShowNewChatModal(false)}
-                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition"
+                className="text-[#8696a0] hover:text-white p-1 rounded-lg hover:bg-[#2a3942] transition"
               >
                 <IconClose className="w-5 h-5" />
               </button>
@@ -2723,46 +3250,46 @@ export default function Home() {
 
             {/* Search Input */}
             <div className="relative mb-4">
-              <IconSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <IconSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8696a0]" />
               <input
                 type="text"
                 placeholder="Search by username or name..."
                 value={searchFilter}
                 onChange={(e) => handleUserSearch(e.target.value)}
                 autoFocus
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white transition"
+                className="w-full pl-10 pr-4 py-2.5 bg-[#111b21] border border-[#2e3b43] rounded-xl text-sm text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#00a884]/60 transition"
               />
             </div>
 
             {/* Results List */}
             <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
               {isSearchingUsers ? (
-                <div className="text-center py-8 text-slate-400 text-sm">Searching...</div>
+                <div className="text-center py-8 text-[#8696a0] text-sm">Searching...</div>
               ) : userSearchResults.length > 0 ? (
                 userSearchResults.map((user) => (
                   <div
                     key={user._id}
                     onClick={() => handleStartChatWithUser(user)}
-                    className="p-3 rounded-xl hover:bg-blue-50/70 border border-transparent hover:border-blue-200 flex items-center gap-3.5 cursor-pointer transition"
+                    className="p-3 rounded-xl hover:bg-[#2a3942] border border-transparent hover:border-[#2e3b43] flex items-center gap-3.5 cursor-pointer transition"
                   >
                     <img
                       src={user.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.username}`}
                       alt={user.username}
-                      className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                      className="w-10 h-10 rounded-full object-cover border border-[#2e3b43]"
                     />
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-sm text-slate-900 truncate">{user.name || user.username}</h4>
-                      <p className="text-xs text-slate-500 truncate">@{user.username}</p>
+                      <h4 className="font-semibold text-sm text-[#e9edef] truncate">{user.name || user.username}</h4>
+                      <p className="text-xs text-[#8696a0] truncate">@{user.username}</p>
                     </div>
-                    <span className="text-xs text-blue-600 font-semibold px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200">
+                    <span className="text-xs text-[#00a884] font-semibold px-2.5 py-1 rounded-lg bg-[#00a884]/20 border border-[#00a884]/30">
                       Chat →
                     </span>
                   </div>
                 ))
               ) : searchFilter.trim() ? (
-                <div className="text-center py-8 text-slate-400 text-sm">No users found.</div>
+                <div className="text-center py-8 text-[#8696a0] text-sm">No users found.</div>
               ) : (
-                <div className="text-center py-8 text-slate-400 text-xs">
+                <div className="text-center py-8 text-[#8696a0] text-xs">
                   Type a username or email to search registered users.
                 </div>
               )}

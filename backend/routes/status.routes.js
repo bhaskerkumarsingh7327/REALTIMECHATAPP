@@ -14,3 +14,4 @@ router.post("/:statusId/view", markStatusViewed);
 router.delete("/:statusId", deleteStatus);
 
 export default router;
+

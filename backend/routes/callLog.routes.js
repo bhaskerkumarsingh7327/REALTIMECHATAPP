@@ -12,3 +12,4 @@ router.post("/log", logCall);
 router.delete("/clear", clearMyCallLogs);
 
 export default router;
+
