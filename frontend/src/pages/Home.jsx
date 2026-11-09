@@ -55,6 +55,8 @@ import {
   IconUserPlus,
   IconStar,
   IconSettings,
+  IconFileText,
+  IconMail,
 } from "../components/Icons";
 import { sounds } from "../utils/soundEffects";
 import { PULSE_AI_USER, generateAIResponse } from "../utils/aiBot";
