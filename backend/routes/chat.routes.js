@@ -2,6 +2,8 @@ import express from "express";
 import {
   getMyChats,
   createOrGetChat,
+  createGroupChat,
+  updateGroupInfo,
   sendMessage,
   markChatAsSeen,
   pinMessage,
@@ -18,6 +20,8 @@ const router = express.Router();
 router.get("/search", searchUsers);
 router.get("/", getMyChats);
 router.post("/", createOrGetChat);
+router.post("/group", createGroupChat);
+router.put("/group/:chatId", updateGroupInfo);
 router.post("/message", sendMessage);
 router.post("/:chatId/seen", markChatAsSeen);
 router.post("/:chatId/pin", pinMessage);

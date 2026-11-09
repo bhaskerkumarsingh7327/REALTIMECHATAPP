@@ -42,6 +42,11 @@ const chatSchema = new mongoose.Schema(
     pinnedMessage: { type: Object, default: null },
     lastMessage: { type: String, default: "" },
     lastMessageAt: { type: Date, default: Date.now },
+    isGroup: { type: Boolean, default: false },
+    groupName: { type: String, default: "" },
+    groupAvatar: { type: String, default: "" },
+    groupAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    groupDescription: { type: String, default: "" },
   },
   { timestamps: true }
 );

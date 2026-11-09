@@ -229,3 +229,50 @@ export const IconBellOff = ({ className = "w-5 h-5", ...props }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.73 21a2 2 0 01-3.46 0M18.63 13A17.89 17.89 0 0118 11V9a6 6 0 00-4-5.659V3a2 2 0 10-4 0v.341C7.67 4.165 6 6.388 6 9v2c0 .67-.09 1.33-.27 1.96M3 3l18 18M9.5 17h8.5l-1.405-1.405" />
   </svg>
 );
+
+export const IconChat = ({ className = "w-5 h-5", ...props }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+  </svg>
+);
+
+export const IconStatus = ({ className = "w-5 h-5", ...props }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <circle cx="12" cy="12" r="9" strokeWidth="2" strokeDasharray="4 3" strokeLinecap="round" />
+    <circle cx="12" cy="12" r="3" fill="currentColor" />
+  </svg>
+);
+
+export const IconUsers = ({ className = "w-5 h-5", ...props }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+  </svg>
+);
+
+export const IconArrowDownLeft = ({ className = "w-4 h-4", ...props }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 5L5 19m0 0h10M5 19V9" />
+  </svg>
+);
+
+export const IconArrowUpRight = ({ className = "w-4 h-4", ...props }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 19L19 5m0 0H9m10 0v10" />
+  </svg>
+);
+
+export const IconEye = ({ className = "w-4 h-4", ...props }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+  </svg>
+);
+
+export const IconPalette = ({ className = "w-4 h-4", ...props }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4 5 5 0 015-5c1.1 0 2 .9 2 2 0 .55.45 1 1 1h2a5 5 0 005-5c0-4.418-4.03-8-9-8s-9 3.582-9 8c0 1.344.33 2.61.91 3.73" />
+    <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
+    <circle cx="12.5" cy="6.5" r="1.5" fill="currentColor" />
+    <circle cx="16.5" cy="8.5" r="1.5" fill="currentColor" />
+  </svg>
+);

@@ -12,6 +12,8 @@ import chatRoutes from "./routes/chat.routes.js";
 import authRouter from "./routes/auth.routes.js";
 import userRouter from "./routes/user.routes.js";
 import mediaRouter from "./routes/media.routes.js";
+import statusRouter from "./routes/status.routes.js";
+import callLogRouter from "./routes/callLog.routes.js";
 import User from "./models/user.model.js";
 import Chat from "./models/chat.model.js";
 
@@ -59,6 +61,8 @@ app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
 app.use("/api/chat", chatRoutes);
 app.use("/api/media", mediaRouter);
+app.use("/api/status", statusRouter);
+app.use("/api/calls", callLogRouter);
 
 const server = http.createServer(app);
 
@@ -150,6 +154,20 @@ io.on("connection", (socket) => {
     if (recipientId && chat) {
       io.to(String(recipientId)).emit("new-chat-received", chat);
     }
+  });
+
+  // 4.1 Group Created Alert (notifies all members of a newly created group)
+  socket.on("group-created", ({ group, memberIds }) => {
+    if (group && memberIds && Array.isArray(memberIds)) {
+      memberIds.forEach((mId) => {
+        io.to(String(mId)).emit("new-chat-received", group);
+      });
+    }
+  });
+
+  // 4.2 Status Posted Alert
+  socket.on("status-posted", (newStatus) => {
+    socket.broadcast.emit("new-status-available", newStatus);
   });
 
   // 5. Typing Indicators

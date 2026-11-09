@@ -11,6 +11,7 @@ export const getMyChats = async (req, res) => {
 
     const chats = await Chat.find({ members: userId })
       .populate("members", "username name avatar about isOnline lastSeen blockedUsers")
+      .populate("groupAdmin", "username name avatar")
       .sort({ updatedAt: -1 });
 
     res.status(200).json(chats || []);
@@ -19,7 +20,7 @@ export const getMyChats = async (req, res) => {
   }
 };
 
-// 2. CREATE OR GET CHAT
+// 2. CREATE OR GET CHAT (1-on-1)
 export const createOrGetChat = async (req, res) => {
   try {
     const { myId, recipientId } = req.body;
@@ -32,14 +33,16 @@ export const createOrGetChat = async (req, res) => {
       return res.status(400).json({ error: "Cannot create chat with yourself" });
     }
 
-    // Check if chat already exists
+    // Check if 1-on-1 chat already exists
     let chat = await Chat.findOne({
-      members: { $all: [myId, recipientId] },
+      isGroup: { $ne: true },
+      members: { $all: [myId, recipientId], $size: 2 },
     }).populate("members", "username name avatar about isOnline lastSeen blockedUsers");
 
     if (!chat) {
       chat = new Chat({
         members: [myId, recipientId],
+        isGroup: false,
         messages: [],
       });
       await chat.save();
@@ -51,6 +54,90 @@ export const createOrGetChat = async (req, res) => {
 
     res.status(200).json(chat);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// 2.1 CREATE GROUP CHAT
+export const createGroupChat = async (req, res) => {
+  try {
+    const { name, description, avatar, adminId, members } = req.body;
+
+    if (!name || !adminId || !members || !Array.isArray(members) || members.length < 1) {
+      return res.status(400).json({ error: "Group name, admin, and at least one member are required." });
+    }
+
+    const memberSet = new Set(members.map(String));
+    memberSet.add(String(adminId));
+    const allMembers = Array.from(memberSet);
+
+    const group = new Chat({
+      members: allMembers,
+      isGroup: true,
+      groupName: name.trim(),
+      groupDescription: description ? description.trim() : "",
+      groupAvatar:
+        avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(name.trim())}`,
+      groupAdmin: adminId,
+      messages: [
+        {
+          sender: "System",
+          text: `Group "${name.trim()}" created. Welcome!`,
+          system: true,
+          mediaType: "system",
+        },
+      ],
+      lastMessage: `Group "${name.trim()}" created.`,
+      lastMessageAt: new Date(),
+    });
+
+    await group.save();
+
+    const populated = await Chat.findById(group._id)
+      .populate("members", "username name avatar about isOnline lastSeen")
+      .populate("groupAdmin", "username name avatar");
+
+    res.status(201).json(populated);
+  } catch (err) {
+    console.error("Create group error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// 2.2 UPDATE GROUP INFO / MEMBERS
+export const updateGroupInfo = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { name, description, avatar, newMembers, removeMemberId } = req.body;
+
+    const chat = await Chat.findById(chatId);
+    if (!chat || !chat.isGroup) {
+      return res.status(404).json({ error: "Group not found" });
+    }
+
+    if (name) chat.groupName = name.trim();
+    if (description !== undefined) chat.groupDescription = description.trim();
+    if (avatar) chat.groupAvatar = avatar;
+
+    if (newMembers && Array.isArray(newMembers)) {
+      const set = new Set(chat.members.map(String));
+      newMembers.forEach((m) => set.add(String(m)));
+      chat.members = Array.from(set);
+    }
+
+    if (removeMemberId) {
+      chat.members = chat.members.filter((m) => String(m) !== String(removeMemberId));
+    }
+
+    await chat.save();
+
+    const updated = await Chat.findById(chatId)
+      .populate("members", "username name avatar about isOnline lastSeen")
+      .populate("groupAdmin", "username name avatar");
+
+    res.status(200).json(updated);
+  } catch (err) {
+    console.error("Update group error:", err);
     res.status(500).json({ error: err.message });
   }
 };

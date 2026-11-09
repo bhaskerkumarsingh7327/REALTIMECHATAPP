@@ -12,6 +12,10 @@ import MyProfileModal from "../components/MyProfileModal";
 import VoiceRecorder from "../components/VoiceRecorder";
 import EmojiPicker from "../components/EmojiPicker";
 import AudioMessage from "../components/AudioMessage";
+import CreateStatusModal from "../components/CreateStatusModal";
+import StoryViewerModal from "../components/StoryViewerModal";
+import CreateGroupModal from "../components/CreateGroupModal";
+import GroupInfoModal from "../components/GroupInfoModal";
 import {
   IconPhone,
   IconVideo,
@@ -37,6 +41,13 @@ import {
   IconDotsVertical,
   IconBell,
   IconBellOff,
+  IconChat,
+  IconStatus,
+  IconUsers,
+  IconArrowDownLeft,
+  IconArrowUpRight,
+  IconEye,
+  IconPalette,
 } from "../components/Icons";
 import { sounds } from "../utils/soundEffects";
 import { PULSE_AI_USER, generateAIResponse } from "../utils/aiBot";
@@ -100,6 +111,24 @@ export default function Home() {
 
   // Blocked users set for instant reactive updates
   const [blockedUserIds, setBlockedUserIds] = useState(new Set());
+
+  // WhatsApp-style Sidebar Navigation Tab: "chats" | "status" | "calls"
+  const [sidebarTab, setSidebarTab] = useState("chats");
+
+  // Status / Story States
+  const [myStatus, setMyStatus] = useState(null);
+  const [otherStatuses, setOtherStatuses] = useState([]);
+  const [selectedStoryGroup, setSelectedStoryGroup] = useState(null);
+  const [showCreateStatusModal, setShowCreateStatusModal] = useState(false);
+  const [loadingStatuses, setLoadingStatuses] = useState(false);
+
+  // Call History States
+  const [callLogs, setCallLogs] = useState([]);
+  const [loadingCallLogs, setLoadingCallLogs] = useState(false);
+
+  // Group Management States
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
 
   // Modals & UI states
   const [showNewChatModal, setShowNewChatModal] = useState(false);
@@ -462,7 +491,14 @@ export default function Home() {
       setCallState("incoming");
     });
 
+    // Realtime Status Available
+    socket.on("new-status-available", () => {
+      fetchStatuses();
+    });
+
     fetchChats();
+    fetchStatuses();
+    fetchCallLogs();
 
     return () => {
       socket.disconnect();
@@ -560,10 +596,24 @@ export default function Home() {
     }
   }, [selectedChat?._id, selectedChat?.messages?.length, userData?._id, userData?.username]);
 
-  // Helper to extract the other user in a 1-to-1 chat
+  // Helper to extract the other user in a 1-to-1 chat or group info
   const getChatPartner = (chat) => {
     if (!chat) return null;
     if (chat.isAIChat) return PULSE_AI_USER;
+    if (chat.isGroup) {
+      return {
+        _id: chat._id,
+        isGroup: true,
+        name: chat.groupName || "Group Chat",
+        username: chat.groupName || "Group Chat",
+        avatar:
+          chat.groupAvatar ||
+          `https://api.dicebear.com/7.x/identicon/svg?seed=${chat._id}`,
+        groupAdmin: chat.groupAdmin,
+        groupDescription: chat.groupDescription,
+        members: chat.members,
+      };
+    }
     const currentId = String(userData?._id || userData?.id || "");
     const partner = chat.members?.find((m) => {
       const memberId = String(m?._id || m || "");
@@ -994,6 +1044,24 @@ export default function Home() {
     setIsCallMinimized(false);
     setCallDuration(0);
 
+    // Record call in persistent backend Call Log
+    try {
+      const logCallerId = callerInfo?._id ? callerInfo._id : userData._id;
+      const logRecipientId = callerInfo?._id ? userData._id : (currentPartner?._id || userData._id);
+      if (logRecipientId && logRecipientId !== PULSE_AI_USER._id) {
+        await axios.post(`${serverUrl}/api/calls/log`, {
+          callerId: logCallerId,
+          recipientId: logRecipientId,
+          callType: cType,
+          status: status === "declined" ? "declined" : duration > 0 ? "completed" : "missed",
+          duration: duration || 0,
+        });
+        fetchCallLogs();
+      }
+    } catch (e) {
+      console.error("Log call error:", e);
+    }
+
     if (!selectedChat || selectedChat.isAIChat) return;
 
     const icon = cType === "video" ? "📹" : "📞";
@@ -1097,6 +1165,136 @@ export default function Home() {
     }
   };
 
+  // Status / Story Handlers
+  const fetchStatuses = async () => {
+    if (!userData?._id) return;
+    setLoadingStatuses(true);
+    try {
+      const res = await axios.get(`${serverUrl}/api/status?userId=${userData._id}`);
+      setMyStatus(res.data?.myStatus || null);
+      setOtherStatuses(res.data?.otherStatuses || []);
+    } catch (err) {
+      console.error("Fetch statuses error:", err);
+    } finally {
+      setLoadingStatuses(false);
+    }
+  };
+
+  const handleMarkStatusViewed = async (statusId) => {
+    if (!statusId || !userData?._id) return;
+    try {
+      await axios.post(`${serverUrl}/api/status/${statusId}/view`, { userId: userData._id });
+    } catch (err) {
+      console.error("View status error:", err);
+    }
+  };
+
+  const handleDeleteStatus = async (statusId) => {
+    if (!statusId) return;
+    try {
+      await axios.delete(`${serverUrl}/api/status/${statusId}`);
+      fetchStatuses();
+      setSelectedStoryGroup(null);
+    } catch (err) {
+      console.error("Delete status error:", err);
+    }
+  };
+
+  // Call History Handlers
+  const fetchCallLogs = async () => {
+    if (!userData?._id) return;
+    setLoadingCallLogs(true);
+    try {
+      const res = await axios.get(`${serverUrl}/api/calls?userId=${userData._id}`);
+      setCallLogs(res.data || []);
+    } catch (err) {
+      console.error("Fetch call logs error:", err);
+    } finally {
+      setLoadingCallLogs(false);
+    }
+  };
+
+  const handleClearCallLogs = async () => {
+    if (!userData?._id) return;
+    if (!window.confirm("Clear all call logs from your history?")) return;
+    try {
+      await axios.delete(`${serverUrl}/api/calls/clear?userId=${userData._id}`);
+      setCallLogs([]);
+    } catch (err) {
+      console.error("Clear call logs error:", err);
+    }
+  };
+
+  const handleCallbackUser = async (targetUser, type = "audio") => {
+    if (!targetUser || !targetUser._id) return;
+    try {
+      const res = await axios.post(`${serverUrl}/api/chat`, {
+        myId: userData._id,
+        recipientId: targetUser._id,
+      });
+      const chat = res.data;
+      const exists = chats.some((c) => c._id === chat._id);
+      if (!exists) setChats((prev) => [chat, ...prev]);
+      setSelectedChat(chat);
+      setSidebarTab("chats");
+
+      // Initiate WebRTC call
+      setCallType(type);
+      setCallerInfo(null);
+      setIsCallMinimized(false);
+      setCallState("outgoing");
+    } catch (err) {
+      console.error("Callback user error:", err);
+    }
+  };
+
+  // Group Handlers
+  const handleGroupCreated = (newGroup) => {
+    setChats((prev) => [newGroup, ...prev.filter((c) => c._id !== newGroup._id)]);
+    setSelectedChat(newGroup);
+    setSidebarTab("chats");
+    if (socketRef.current) {
+      socketRef.current.emit("join-room", newGroup._id);
+      socketRef.current.emit("group-created", {
+        memberIds: newGroup.members?.map((m) => m._id || m),
+        groupChat: newGroup,
+      });
+    }
+  };
+
+  const handleGroupUpdated = (updatedGroup) => {
+    setSelectedChat(updatedGroup);
+    setChats((prev) => prev.map((c) => (c._id === updatedGroup._id ? updatedGroup : c)));
+  };
+
+  const handleLeaveGroup = async () => {
+    if (!selectedChat?._id || !userData?._id) return;
+    if (!window.confirm("Are you sure you want to exit this group?")) return;
+    try {
+      const updatedMembers = selectedChat.members?.filter(
+        (m) => String(m._id || m) !== String(userData._id)
+      );
+      await axios.put(`${serverUrl}/api/chat/group/${selectedChat._id}`, {
+        userId: userData._id,
+        members: updatedMembers.map((m) => m._id || m),
+      });
+      setShowGroupInfoModal(false);
+      setChats((prev) => prev.filter((c) => c._id !== selectedChat._id));
+      setSelectedChat(null);
+    } catch (err) {
+      console.error("Leave group error:", err);
+    }
+  };
+
+  // Tab switch listener
+  useEffect(() => {
+    if (sidebarTab === "status") {
+      fetchStatuses();
+    } else if (sidebarTab === "calls") {
+      fetchCallLogs();
+    }
+  }, [sidebarTab]);
+
   const getMediaUrl = (url) => {
     if (!url) return "";
     if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:") || url.startsWith("blob:")) {
@@ -1168,6 +1366,15 @@ export default function Home() {
               <IconUser className="w-4 h-4" />
             </button>
 
+            {/* New Group Button */}
+            <button
+              onClick={() => setShowCreateGroupModal(true)}
+              className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl transition border border-indigo-200"
+              title="Create New Group"
+            >
+              <IconUsers className="w-4 h-4" />
+            </button>
+
             {/* New Chat Button */}
             <button
               onClick={() => setShowNewChatModal(true)}
@@ -1225,114 +1432,429 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Search Input Filter */}
-        <div className="px-3 py-1">
-          <div className="relative">
-            <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search chats, contacts, messages..."
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-200/90 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
-            />
-          </div>
+        {/* WhatsApp-Style Navigation Tabs: Chats, Status, Calls */}
+        <div className="px-3 pt-1 pb-2 flex items-center justify-between gap-1 border-b border-slate-200/80 bg-white">
+          <button
+            onClick={() => setSidebarTab("chats")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-semibold transition ${
+              sidebarTab === "chats"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <IconChat className="w-4 h-4" />
+            <span>Chats</span>
+            {chats.length > 0 && (
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  sidebarTab === "chats" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+                }`}
+              >
+                {chats.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setSidebarTab("status")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-semibold transition relative ${
+              sidebarTab === "status"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <IconStatus className="w-4 h-4" />
+            <span>Status</span>
+            {otherStatuses.some((s) => s.hasUnviewed) && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-white"></span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setSidebarTab("calls")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-semibold transition ${
+              sidebarTab === "calls"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <IconPhone className="w-4 h-4" />
+            <span>Calls</span>
+            {callLogs.length > 0 && (
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  sidebarTab === "calls" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+                }`}
+              >
+                {callLogs.length}
+              </span>
+            )}
+          </button>
         </div>
 
-        {/* Chats List Header */}
-        <div className="px-4 pt-3 pb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500">
-          <span>Conversations</span>
-          <span className="text-slate-500 font-mono font-semibold">{chats.length}</span>
-        </div>
+        {/* TAB 1: CHATS VIEW */}
+        {sidebarTab === "chats" && (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            {/* Search Input Filter */}
+            <div className="px-3 py-2 flex-shrink-0">
+              <div className="relative">
+                <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search chats, contacts, messages..."
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-200/90 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
+                />
+              </div>
+            </div>
 
-        {/* Chats List */}
-        <div className="flex-1 overflow-y-auto px-2.5 py-1 space-y-1">
-          {chats
-            .filter((c) => {
-              if (!searchFilter.trim()) return true;
-              const partner = getChatPartner(c);
-              const q = searchFilter.toLowerCase();
-              return (
-                partner.username?.toLowerCase().includes(q) ||
-                partner.name?.toLowerCase().includes(q) ||
-                c.lastMessage?.toLowerCase().includes(q)
-              );
-            })
-            .map((chat) => {
-              const partner = getChatPartner(chat);
-              const isSelected = selectedChat?._id === chat._id;
-              const isOnline = chat.isAIChat ? true : onlineUsers.has(String(partner._id));
+            {/* Chats List Header */}
+            <div className="px-4 pt-1 pb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 flex-shrink-0">
+              <span>Conversations</span>
+              <span className="text-slate-500 font-mono font-semibold">{chats.length}</span>
+            </div>
 
-              // Compute unread message count
-              const unreadCount = !chat.isAIChat
-                ? chat.messages?.filter((m) => m.sender !== userData?.username && !m.seen).length || 0
-                : 0;
+            {/* Chats List */}
+            <div className="flex-1 overflow-y-auto px-2.5 py-1 space-y-1">
+              {chats
+                .filter((c) => {
+                  if (!searchFilter.trim()) return true;
+                  const partner = getChatPartner(c);
+                  const q = searchFilter.toLowerCase();
+                  return (
+                    partner.username?.toLowerCase().includes(q) ||
+                    partner.name?.toLowerCase().includes(q) ||
+                    c.lastMessage?.toLowerCase().includes(q)
+                  );
+                })
+                .map((chat) => {
+                  const partner = getChatPartner(chat);
+                  const isSelected = selectedChat?._id === chat._id;
+                  const isOnline = chat.isAIChat
+                    ? true
+                    : chat.isGroup
+                    ? false
+                    : onlineUsers.has(String(partner._id));
 
-              return (
-                <div
-                  key={chat._id}
-                  onClick={() => setSelectedChat(chat)}
-                  className={`group relative p-3 rounded-2xl cursor-pointer transition-all flex items-center gap-3.5 border ${
-                    isSelected
-                      ? "bg-blue-50/90 border-blue-200 text-slate-900 shadow-xs"
-                      : "hover:bg-slate-50 text-slate-700 border-transparent hover:border-slate-200/70"
-                  }`}
-                >
-                  {/* Avatar with Status Ring */}
-                  <div className="relative flex-shrink-0">
-                    <img
-                      src={
-                        partner.avatar ||
-                        `https://api.dicebear.com/7.x/bottts/svg?seed=${partner.username || "user"}`
-                      }
-                      alt={partner.username}
-                      className="w-11 h-11 rounded-full object-cover border border-slate-200 group-hover:scale-105 transition"
-                    />
-                    {isOnline && (
-                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full shadow-xs"></span>
-                    )}
-                  </div>
+                  // Compute unread message count
+                  const unreadCount = !chat.isAIChat
+                    ? chat.messages?.filter((m) => m.sender !== userData?.username && !m.seen).length || 0
+                    : 0;
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <div className="flex items-center gap-1.5 truncate">
-                        <span className={`font-semibold text-sm truncate ${isSelected ? "text-blue-900" : "text-slate-800"}`}>
-                          {partner.name || partner.username}
-                        </span>
-                        {chat.isAIChat && (
-                          <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-200">
-                            <IconSparkles className="w-2.5 h-2.5" /> AI
-                          </span>
+                  return (
+                    <div
+                      key={chat._id}
+                      onClick={() => setSelectedChat(chat)}
+                      className={`group relative p-3 rounded-2xl cursor-pointer transition-all flex items-center gap-3.5 border ${
+                        isSelected
+                          ? "bg-blue-50/90 border-blue-200 text-slate-900 shadow-xs"
+                          : "hover:bg-slate-50 text-slate-700 border-transparent hover:border-slate-200/70"
+                      }`}
+                    >
+                      {/* Avatar with Status Ring */}
+                      <div className="relative flex-shrink-0">
+                        <img
+                          src={
+                            partner.avatar ||
+                            `https://api.dicebear.com/7.x/bottts/svg?seed=${partner.username || "user"}`
+                          }
+                          alt={partner.username}
+                          className="w-11 h-11 rounded-full object-cover border border-slate-200 group-hover:scale-105 transition"
+                        />
+                        {isOnline && (
+                          <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full shadow-xs"></span>
                         )}
                       </div>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        {chat.lastMessageAt
-                          ? new Date(chat.lastMessageAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : ""}
-                      </span>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span
+                              className={`font-semibold text-sm truncate ${
+                                isSelected ? "text-blue-900" : "text-slate-800"
+                              }`}
+                            >
+                              {partner.name || partner.username}
+                            </span>
+                            {chat.isAIChat && (
+                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-200">
+                                <IconSparkles className="w-2.5 h-2.5" /> AI
+                              </span>
+                            )}
+                            {chat.isGroup && (
+                              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded border border-indigo-200">
+                                <IconUsers className="w-2.5 h-2.5" /> Group
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {chat.lastMessageAt
+                              ? new Date(chat.lastMessageAt).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : ""}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <p
+                            className={`text-xs truncate ${
+                              isSelected ? "text-blue-800/90 font-medium" : "text-slate-500"
+                            }`}
+                          >
+                            {chat.lastMessage || (chat.isGroup ? "Group created" : "No messages yet")}
+                          </p>
+
+                          {/* Unread message count badge */}
+                          {unreadCount > 0 && !isSelected && (
+                            <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-xs flex-shrink-0">
+                              {unreadCount}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
 
-                    <div className="flex items-center justify-between">
-                      <p className={`text-xs truncate ${isSelected ? "text-blue-800/90 font-medium" : "text-slate-500"}`}>
-                        {chat.lastMessage || "No messages yet"}
-                      </p>
+        {/* TAB 2: STATUS / STORY VIEW */}
+        {sidebarTab === "status" && (
+          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+            {/* My Status Card */}
+            <div className="p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/90 rounded-2xl transition flex items-center justify-between">
+              <div
+                onClick={() => {
+                  if (myStatus && myStatus.statuses?.length > 0) {
+                    setSelectedStoryGroup({
+                      user: userData,
+                      statuses: myStatus.statuses,
+                      isOwn: true,
+                    });
+                  } else {
+                    setShowCreateStatusModal(true);
+                  }
+                }}
+                className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
+              >
+                <div className="relative flex-shrink-0">
+                  <img
+                    src={userData?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${userData?.username}`}
+                    alt={userData?.username}
+                    className={`w-12 h-12 rounded-full object-cover border-2 p-0.5 transition ${
+                      myStatus && myStatus.statuses?.length > 0
+                        ? "border-emerald-500 ring-2 ring-emerald-200"
+                        : "border-slate-200"
+                    }`}
+                  />
+                  {(!myStatus || myStatus.statuses?.length === 0) && (
+                    <span className="absolute bottom-0 right-0 w-4 h-4 bg-blue-600 text-white rounded-full flex items-center justify-center text-[11px] font-bold shadow-xs">
+                      +
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <h4 className="font-bold text-sm text-slate-800 truncate">My Status</h4>
+                  <p className="text-xs text-slate-500 truncate">
+                    {myStatus && myStatus.statuses?.length > 0
+                      ? `${myStatus.statuses.length} update${myStatus.statuses.length > 1 ? "s" : ""} • Tap to view`
+                      : "Tap to add status update"}
+                  </p>
+                </div>
+              </div>
 
-                      {/* Unread message count badge */}
-                      {unreadCount > 0 && !isSelected && (
-                        <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-xs flex-shrink-0">
-                          {unreadCount}
-                        </span>
+              {/* Quick add status button */}
+              <button
+                onClick={() => setShowCreateStatusModal(true)}
+                className="p-2 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-600 border border-slate-200 rounded-xl transition shadow-xs"
+                title="Add text or photo status"
+              >
+                <IconCamera className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Recent Updates Header */}
+            <div className="pt-2 px-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <span>Recent Updates</span>
+              <span className="text-slate-500 font-mono font-semibold">{otherStatuses.length}</span>
+            </div>
+
+            {/* Contacts Status List */}
+            {loadingStatuses ? (
+              <div className="py-8 text-center text-xs text-slate-400">Loading updates...</div>
+            ) : otherStatuses.length === 0 ? (
+              <div className="p-6 text-center bg-slate-50/70 border border-slate-200/60 rounded-2xl">
+                <p className="text-xs text-slate-600 font-medium">No recent updates</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Status updates from contacts will appear here and disappear after 24 hours.
+                </p>
+                <button
+                  onClick={() => setShowCreateStatusModal(true)}
+                  className="mt-3 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition shadow-xs"
+                >
+                  Share an update
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {otherStatuses.map((item) => {
+                  const contact = item.user || {};
+                  const lastStatus = item.statuses[item.statuses.length - 1];
+                  return (
+                    <div
+                      key={contact._id}
+                      onClick={() =>
+                        setSelectedStoryGroup({
+                          user: contact,
+                          statuses: item.statuses,
+                          isOwn: false,
+                        })
+                      }
+                      className="p-2.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-200/80 flex items-center gap-3 cursor-pointer transition"
+                    >
+                      <div className="relative flex-shrink-0">
+                        <img
+                          src={contact.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${contact.username}`}
+                          alt={contact.username}
+                          className={`w-11 h-11 rounded-full object-cover p-0.5 border-2 transition ${
+                            item.hasUnviewed
+                              ? "border-emerald-500 ring-2 ring-emerald-300"
+                              : "border-slate-300"
+                          }`}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-sm text-slate-800 truncate">
+                          {contact.name || contact.username}
+                        </h4>
+                        <p className="text-xs text-slate-500 truncate flex items-center gap-1.5">
+                          <span>
+                            {item.statuses.length} update{item.statuses.length > 1 ? "s" : ""}
+                          </span>
+                          <span>•</span>
+                          <span>{formatRelativeTime(lastStatus?.createdAt)}</span>
+                        </p>
+                      </div>
+                      {item.hasUnviewed && (
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
                       )}
                     </div>
-                  </div>
-                </div>
-              );
-            })}
-        </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: CALL HISTORY VIEW */}
+        {sidebarTab === "calls" && (
+          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
+            {/* Header with clear history button */}
+            <div className="px-1 py-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <span>Call History</span>
+              {callLogs.length > 0 && (
+                <button
+                  onClick={handleClearCallLogs}
+                  className="text-[11px] font-semibold text-red-500 hover:text-red-600 transition flex items-center gap-1"
+                >
+                  <IconTrash className="w-3 h-3" />
+                  <span>Clear</span>
+                </button>
+              )}
+            </div>
+
+            {loadingCallLogs ? (
+              <div className="py-8 text-center text-xs text-slate-400">Loading call history...</div>
+            ) : callLogs.length === 0 ? (
+              <div className="p-6 text-center bg-slate-50/70 border border-slate-200/60 rounded-2xl">
+                <p className="text-xs text-slate-600 font-medium">No call logs yet</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Calls made or received with your contacts will be saved here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {callLogs.map((log) => {
+                  const isCaller = String(log.caller?._id || log.caller) === String(userData._id);
+                  const otherParty = isCaller ? log.recipient : log.caller;
+                  const isMissed = log.status === "missed" || log.status === "declined";
+
+                  return (
+                    <div
+                      key={log._id}
+                      className="p-2.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-200/80 flex items-center gap-3 transition group"
+                    >
+                      {/* Contact avatar */}
+                      <img
+                        src={
+                          otherParty?.avatar ||
+                          `https://api.dicebear.com/7.x/bottts/svg?seed=${otherParty?.username || "call"}`
+                        }
+                        alt={otherParty?.username}
+                        className="w-11 h-11 rounded-full object-cover border border-slate-200"
+                      />
+
+                      {/* Call Info */}
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-sm text-slate-800 truncate">
+                          {otherParty?.name || otherParty?.username || "Contact"}
+                        </h4>
+                        <div className="flex items-center gap-1.5 text-xs mt-0.5">
+                          {isCaller ? (
+                            <span className="flex items-center gap-1 text-blue-600">
+                              <IconArrowUpRight className="w-3.5 h-3.5" />
+                              <span>Outgoing</span>
+                            </span>
+                          ) : isMissed ? (
+                            <span className="flex items-center gap-1 text-red-500 font-semibold">
+                              <IconArrowDownLeft className="w-3.5 h-3.5" />
+                              <span>Missed</span>
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-emerald-600">
+                              <IconArrowDownLeft className="w-3.5 h-3.5" />
+                              <span>Incoming</span>
+                            </span>
+                          )}
+
+                          <span className="text-slate-400">•</span>
+                          <span className="text-slate-500 text-[11px]">
+                            {log.duration > 0
+                              ? formatCallDuration(log.duration)
+                              : formatRelativeTime(log.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Quick callback action buttons */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleCallbackUser(otherParty, "audio")}
+                          className="p-2 rounded-xl bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 border border-slate-200 hover:border-emerald-200 transition"
+                          title="Audio call back"
+                        >
+                          <IconPhone className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleCallbackUser(otherParty, "video")}
+                          className="p-2 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 border border-slate-200 hover:border-blue-200 transition"
+                          title="Video call back"
+                        >
+                          <IconVideo className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ======================================================== */}
@@ -1347,15 +1869,25 @@ export default function Home() {
           <>
             {/* Chat Top Header Bar */}
             <div className="p-3 md:p-3.5 bg-white/95 border-b border-slate-200/90 backdrop-blur-xl flex items-center justify-between z-20 shadow-xs">
-              {/* Partner Info (Click to open profile modal) */}
+              {/* Partner / Group Info (Click to open modal) */}
               <div
                 onClick={() => {
-                  if (!selectedChat.isAIChat) setShowProfileModal(true);
+                  if (selectedChat.isGroup) {
+                    setShowGroupInfoModal(true);
+                  } else if (!selectedChat.isAIChat) {
+                    setShowProfileModal(true);
+                  }
                 }}
                 className={`flex items-center gap-3 min-w-0 ${
                   !selectedChat.isAIChat ? "cursor-pointer group" : ""
                 }`}
-                title={!selectedChat.isAIChat ? "Click to view profile & media" : "Pulse AI Assistant"}
+                title={
+                  selectedChat.isGroup
+                    ? "Group info & members"
+                    : !selectedChat.isAIChat
+                    ? "Click to view profile & media"
+                    : "Pulse AI Assistant"
+                }
               >
                 {/* Mobile back arrow */}
                 <button
@@ -1377,11 +1909,12 @@ export default function Home() {
                     alt={currentPartner?.username}
                     className="w-10 h-10 rounded-full object-cover border border-slate-200 group-hover:border-blue-500 transition shadow-xs"
                   />
-                  {isPartnerOnline ? (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full animate-pulse"></span>
-                  ) : (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-slate-400 border-2 border-white rounded-full"></span>
-                  )}
+                  {!selectedChat.isGroup &&
+                    (isPartnerOnline ? (
+                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full animate-pulse"></span>
+                    ) : (
+                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-slate-400 border-2 border-white rounded-full"></span>
+                    ))}
                 </div>
 
                 <div className="min-w-0">
@@ -1393,7 +1926,12 @@ export default function Home() {
                           <IconBellOff className="w-3.5 h-3.5 text-slate-400" />
                         </span>
                       )}
-                      {isContactBlockedByMe && (
+                      {selectedChat.isGroup && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-bold border border-indigo-200">
+                          Group
+                        </span>
+                      )}
+                      {isContactBlockedByMe && !selectedChat.isGroup && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-bold border border-red-200">
                           Blocked
                         </span>
@@ -1415,6 +1953,10 @@ export default function Home() {
                       <span className="text-blue-600 font-medium animate-pulse">
                         ✍️ {remoteTypingUser} is typing...
                       </span>
+                    ) : selectedChat.isGroup ? (
+                      <span className="text-slate-500 font-medium">
+                        {selectedChat.members?.length || 0} participants • Tap for info
+                      </span>
                     ) : isPartnerOnline ? (
                       <span className="text-emerald-600 font-medium flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -1431,7 +1973,7 @@ export default function Home() {
 
               {/* Header Action Buttons */}
               <div className="flex items-center gap-1.5 relative">
-                {!selectedChat.isAIChat && (
+                {!selectedChat.isAIChat && !selectedChat.isGroup && (
                   <>
                     <button
                       disabled={isContactBlockedByMe}
@@ -1478,7 +2020,82 @@ export default function Home() {
                   {/* Dropdown Popover */}
                   {showChatMenu && (
                     <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200/90 rounded-2xl shadow-xl py-1.5 z-50 animate-fade-in text-xs font-medium text-slate-700">
-                      {!selectedChat.isAIChat ? (
+                      {selectedChat.isGroup ? (
+                        <>
+                          {/* Group info */}
+                          <button
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              setShowGroupInfoModal(true);
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                          >
+                            <IconInfo className="w-4 h-4 text-slate-500" />
+                            <span>Group info</span>
+                          </button>
+
+                          {/* Search in group chat */}
+                          <button
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              setSearchInChatOpen((prev) => !prev);
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                          >
+                            <IconSearch className="w-4 h-4 text-slate-500" />
+                            <span>Search in conversation</span>
+                          </button>
+
+                          {/* Mute notifications */}
+                          <button
+                            onClick={() => {
+                              handleToggleMuteChat(selectedChat._id);
+                              setShowChatMenu(false);
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                          >
+                            {mutedChats.has(selectedChat._id) ? (
+                              <>
+                                <IconBell className="w-4 h-4 text-slate-500" />
+                                <span>Unmute notifications</span>
+                              </>
+                            ) : (
+                              <>
+                                <IconBellOff className="w-4 h-4 text-slate-500" />
+                                <span>Mute notifications</span>
+                              </>
+                            )}
+                          </button>
+
+                          <div className="my-1 border-t border-slate-100"></div>
+
+                          {/* Clear chat history */}
+                          <button
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              if (window.confirm("Are you sure you want to clear all messages in this group?")) {
+                                handleClearChatHistory();
+                              }
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2.5 transition text-slate-700"
+                          >
+                            <IconTrash className="w-4 h-4 text-slate-400" />
+                            <span>Clear chat history</span>
+                          </button>
+
+                          {/* Leave / Exit group */}
+                          <button
+                            onClick={() => {
+                              setShowChatMenu(false);
+                              handleLeaveGroup();
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left hover:bg-red-50 flex items-center gap-2.5 transition text-red-600 font-medium"
+                          >
+                            <IconLogOut className="w-4 h-4 text-red-500" />
+                            <span>Exit group</span>
+                          </button>
+                        </>
+                      ) : !selectedChat.isAIChat ? (
                         <>
                           {/* 1. Contact info */}
                           <button
@@ -2174,6 +2791,57 @@ export default function Home() {
             className="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl border border-white/10"
           />
         </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 8. CREATE STATUS / STORY MODAL */}
+      {/* ======================================================== */}
+      {showCreateStatusModal && (
+        <CreateStatusModal
+          currentUser={userData}
+          onClose={() => setShowCreateStatusModal(false)}
+          onStatusCreated={() => {
+            fetchStatuses();
+            socketRef.current?.emit("status-posted", { userId: userData._id });
+          }}
+        />
+      )}
+
+      {/* ======================================================== */}
+      {/* 9. STORY / STATUS VIEWER MODAL */}
+      {/* ======================================================== */}
+      {selectedStoryGroup && (
+        <StoryViewerModal
+          storyGroup={selectedStoryGroup}
+          currentUser={userData}
+          onClose={() => setSelectedStoryGroup(null)}
+          onViewStatus={handleMarkStatusViewed}
+          onDeleteStatus={handleDeleteStatus}
+        />
+      )}
+
+      {/* ======================================================== */}
+      {/* 10. CREATE GROUP MODAL */}
+      {/* ======================================================== */}
+      {showCreateGroupModal && (
+        <CreateGroupModal
+          currentUser={userData}
+          onClose={() => setShowCreateGroupModal(false)}
+          onGroupCreated={handleGroupCreated}
+        />
+      )}
+
+      {/* ======================================================== */}
+      {/* 11. GROUP INFO & MEMBERS MODAL */}
+      {/* ======================================================== */}
+      {showGroupInfoModal && selectedChat?.isGroup && (
+        <GroupInfoModal
+          chat={selectedChat}
+          currentUser={userData}
+          onClose={() => setShowGroupInfoModal(false)}
+          onGroupUpdated={handleGroupUpdated}
+          onLeaveGroup={handleLeaveGroup}
+        />
       )}
     </div>
   );
