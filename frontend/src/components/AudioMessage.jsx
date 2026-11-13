@@ -6,7 +6,18 @@ export default function AudioMessage({ audioUrl, isSender }) {
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
   const audioRef = useRef(null);
+
+  const cycleSpeed = (e) => {
+    e.stopPropagation();
+    const speeds = [1, 1.5, 2];
+    const next = speeds[(speeds.indexOf(playbackRate) + 1) % speeds.length];
+    setPlaybackRate(next);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = next;
+    }
+  };
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -99,9 +110,23 @@ export default function AudioMessage({ audioUrl, isSender }) {
           ></div>
         </div>
 
-        <div className="flex justify-between items-center text-[10px] opacity-80 font-mono">
+        <div className="flex justify-between items-center text-[10px] opacity-80 font-mono mt-0.5">
           <span>{formatSecs(currentTime)}</span>
-          <span>{formatSecs(duration)}</span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={cycleSpeed}
+              className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-tight transition cursor-pointer select-none ${
+                isSender
+                  ? "bg-white/20 hover:bg-white/30 text-white"
+                  : "bg-black/10 hover:bg-black/20 text-[#00a884] dark:text-[#25d366] dark:bg-white/10"
+              }`}
+              title="Change playback speed"
+            >
+              {playbackRate}x
+            </button>
+            <span>{formatSecs(duration)}</span>
+          </div>
         </div>
       </div>
     </div>

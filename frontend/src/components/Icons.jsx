@@ -340,3 +340,16 @@ export const IconSettings = ({ className = "w-5 h-5", ...props }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
   </svg>
 );
+
+export const IconForward = ({ className = "w-4 h-4", ...props }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10H11a8 8 0 00-8 8v2M21 10l-6-6m6 6l-6 6" />
+  </svg>
+);
+
+export const IconViewOnce = ({ className = "w-5 h-5", ...props }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="12" cy="12" r="9.5" strokeDasharray="3.5 2.5" />
+    <path d="M10.5 10.5L12 9v6" strokeWidth={2.5} />
+  </svg>
+);

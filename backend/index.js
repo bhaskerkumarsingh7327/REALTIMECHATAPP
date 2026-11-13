@@ -203,6 +203,13 @@ io.on("connection", (socket) => {
     }
   });
 
+  // 7.05 View-Once Message Opened
+  socket.on("view-once-opened", ({ roomId, messageId }) => {
+    if (roomId && messageId) {
+      io.in(String(roomId)).emit("message-view-once-opened", { chatId: roomId, messageId });
+    }
+  });
+
   // 7.1 Mark Messages as Seen / Read Receipts
   socket.on("mark-as-seen", async ({ roomId, userId, readerId, readerUsername, senderId }) => {
     try {

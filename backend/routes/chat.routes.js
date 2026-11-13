@@ -13,6 +13,7 @@ import {
   deleteMessage,
   deleteChat,
   searchUsers,
+  markViewOnceOpened,
 } from "../controller/chat.controllers.js";
 
 const router = express.Router();
@@ -24,6 +25,7 @@ router.post("/group", createGroupChat);
 router.put("/group/:chatId", updateGroupInfo);
 router.post("/message", sendMessage);
 router.post("/:chatId/seen", markChatAsSeen);
+router.post("/:chatId/message/:messageId/view-once", markViewOnceOpened);
 router.post("/:chatId/pin", pinMessage);
 router.post("/:chatId/unpin", unpinMessage);
 router.post("/:chatId/clear", clearChatHistory);

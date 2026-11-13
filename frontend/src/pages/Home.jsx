@@ -16,6 +16,7 @@ import CreateStatusModal from "../components/CreateStatusModal";
 import StoryViewerModal from "../components/StoryViewerModal";
 import CreateGroupModal from "../components/CreateGroupModal";
 import GroupInfoModal from "../components/GroupInfoModal";
+import ForwardMessageModal from "../components/ForwardMessageModal";
 import {
   IconPhone,
   IconVideo,
@@ -57,6 +58,9 @@ import {
   IconSettings,
   IconFileText,
   IconMail,
+  IconReply,
+  IconForward,
+  IconViewOnce,
 } from "../components/Icons";
 import { sounds } from "../utils/soundEffects";
 import { PULSE_AI_USER, generateAIResponse } from "../utils/aiBot";
@@ -152,6 +156,20 @@ export default function Home() {
   const [previewImage, setPreviewImage] = useState(null);
   const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
   const [copiedMsgId, setCopiedMsgId] = useState(null);
+
+  // Reply / Quoting Message State
+  const [replyingTo, setReplyingTo] = useState(null);
+
+  // View-Once Media States
+  const [isViewOnceActive, setIsViewOnceActive] = useState(false);
+  const [activeViewOnceMedia, setActiveViewOnceMedia] = useState(null);
+  const [pendingUploadFile, setPendingUploadFile] = useState(null);
+  const [pendingUploadPreview, setPendingUploadPreview] = useState(null);
+  const [pendingCaption, setPendingCaption] = useState("");
+
+  // Forward Message States
+  const [forwardingMsg, setForwardingMsg] = useState(null);
+  const [showForwardModal, setShowForwardModal] = useState(false);
 
   // WhatsApp-style 3-Dot Menu & In-Chat Search State
   const [showChatMenu, setShowChatMenu] = useState(false);
@@ -447,6 +465,31 @@ export default function Home() {
       );
       setChats((prev) =>
         prev.map((c) => (String(c._id) === String(roomId) ? { ...c, messages: [], lastMessage: "Chat cleared" } : c))
+      );
+    });
+
+    // Realtime View-Once Message Opened
+    socket.on("message-view-once-opened", ({ chatId, messageId }) => {
+      setSelectedChat((prev) => {
+        if (!prev || String(prev._id) !== String(chatId)) return prev;
+        return {
+          ...prev,
+          messages: prev.messages?.map((m) =>
+            m._id === messageId ? { ...m, viewOnceOpened: true } : m
+          ),
+        };
+      });
+      setChats((prev) =>
+        prev.map((c) =>
+          String(c._id) === String(chatId)
+            ? {
+                ...c,
+                messages: c.messages?.map((m) =>
+                  m._id === messageId ? { ...m, viewOnceOpened: true } : m
+                ),
+              }
+            : c
+        )
       );
     });
 
@@ -782,6 +825,15 @@ export default function Home() {
 
     // Normal User Chat
     try {
+      const currentReply = replyingTo
+        ? {
+            messageId: replyingTo._id,
+            sender: replyingTo.sender,
+            text: replyingTo.text,
+            mediaType: replyingTo.mediaType,
+          }
+        : null;
+
       const msgPayload = {
         chatId: selectedChat._id,
         sender: userData.username,
@@ -789,12 +841,14 @@ export default function Home() {
         recipientId: currentPartner?._id,
         text,
         mediaType: "text",
+        replyTo: currentReply,
       };
 
       const res = await axios.post(`${serverUrl}/api/chat/message`, msgPayload);
       const saved = res.data;
 
       sounds.playMessageSent();
+      setReplyingTo(null);
 
       socketRef.current?.emit("send-message", {
         roomId: selectedChat._id,
@@ -832,6 +886,16 @@ export default function Home() {
       return;
     }
 
+    // If it's an image, open preview with View-Once toggle & caption
+    if (file.type.startsWith("image/")) {
+      const previewUrl = URL.createObjectURL(file);
+      setPendingUploadFile(file);
+      setPendingUploadPreview(previewUrl);
+      setIsViewOnceActive(false);
+      setPendingCaption("");
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
 
@@ -839,6 +903,15 @@ export default function Home() {
       const uploadRes = await axios.post(`${serverUrl}/api/media/upload`, formData);
       const { url, fileName, fileSize, mediaType } = uploadRes.data;
       const fullUrl = url.startsWith("http") ? url : `${serverUrl}${url}`;
+
+      const currentReply = replyingTo
+        ? {
+            messageId: replyingTo._id,
+            sender: replyingTo.sender,
+            text: replyingTo.text,
+            mediaType: replyingTo.mediaType,
+          }
+        : null;
 
       const msgPayload = {
         chatId: selectedChat._id,
@@ -850,12 +923,14 @@ export default function Home() {
         mediaType,
         fileName,
         fileSize,
+        replyTo: currentReply,
       };
 
       const res = await axios.post(`${serverUrl}/api/chat/message`, msgPayload);
       const saved = res.data;
 
       sounds.playMessageSent();
+      setReplyingTo(null);
 
       socketRef.current?.emit("send-message", {
         roomId: selectedChat._id,
@@ -885,6 +960,186 @@ export default function Home() {
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  // 5.1 Send Staged Image with View-Once Option
+  const handleSendPendingImage = async () => {
+    if (!pendingUploadFile || !selectedChat) return;
+    const file = pendingUploadFile;
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const uploadRes = await axios.post(`${serverUrl}/api/media/upload`, formData);
+      const { url, fileName, fileSize } = uploadRes.data;
+      const fullUrl = url.startsWith("http") ? url : `${serverUrl}${url}`;
+
+      const currentReply = replyingTo
+        ? {
+            messageId: replyingTo._id,
+            sender: replyingTo.sender,
+            text: replyingTo.text,
+            mediaType: replyingTo.mediaType,
+          }
+        : null;
+
+      const msgPayload = {
+        chatId: selectedChat._id,
+        sender: userData.username,
+        senderId: userData._id,
+        recipientId: currentPartner?._id,
+        text: pendingCaption.trim() || file.name,
+        mediaUrl: fullUrl,
+        mediaType: "image",
+        fileName,
+        fileSize,
+        isViewOnce: isViewOnceActive,
+        replyTo: currentReply,
+      };
+
+      const res = await axios.post(`${serverUrl}/api/chat/message`, msgPayload);
+      const saved = res.data;
+
+      sounds.playMessageSent();
+
+      socketRef.current?.emit("send-message", {
+        roomId: selectedChat._id,
+        message: saved,
+        recipientId: currentPartner?._id,
+      });
+
+      setSelectedChat((prev) => ({
+        ...prev,
+        messages: [...(prev.messages || []), saved],
+      }));
+
+      setChats((prev) =>
+        prev.map((c) =>
+          c._id === selectedChat._id
+            ? {
+                ...c,
+                messages: [...(c.messages || []), saved],
+                lastMessage: isViewOnceActive ? "① View once photo" : "📷 Photo",
+                lastMessageAt: new Date(),
+              }
+            : c
+        )
+      );
+    } catch (err) {
+      console.error("Send image error:", err);
+      alert("Failed to send photo. Please try again.");
+    } finally {
+      if (pendingUploadPreview) URL.revokeObjectURL(pendingUploadPreview);
+      setPendingUploadFile(null);
+      setPendingUploadPreview(null);
+      setIsViewOnceActive(false);
+      setPendingCaption("");
+      setReplyingTo(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleCancelPendingUpload = () => {
+    if (pendingUploadPreview) URL.revokeObjectURL(pendingUploadPreview);
+    setPendingUploadFile(null);
+    setPendingUploadPreview(null);
+    setIsViewOnceActive(false);
+    setPendingCaption("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // 5.2 Open View-Once Photo Handler
+  const handleOpenViewOnce = async (msg) => {
+    if (!msg || !selectedChat) return;
+    setActiveViewOnceMedia(msg);
+
+    // If recipient is viewing, mark as opened in DB and socket
+    if (msg.sender !== userData.username && !msg.viewOnceOpened) {
+      try {
+        await axios.post(`${serverUrl}/api/chat/${selectedChat._id}/message/${msg._id}/view-once`);
+        socketRef.current?.emit("view-once-opened", {
+          roomId: selectedChat._id,
+          messageId: msg._id,
+        });
+
+        setSelectedChat((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            messages: prev.messages?.map((m) =>
+              m._id === msg._id ? { ...m, viewOnceOpened: true } : m
+            ),
+          };
+        });
+
+        setChats((prev) =>
+          prev.map((c) =>
+            c._id === selectedChat._id
+              ? {
+                  ...c,
+                  messages: c.messages?.map((m) =>
+                    m._id === msg._id ? { ...m, viewOnceOpened: true } : m
+                  ),
+                }
+              : c
+          )
+        );
+      } catch (e) {
+        console.error("Failed to mark view-once as opened:", e);
+      }
+    }
+  };
+
+  // 5.3 Forward Message Handler
+  const handleForwardMessage = async (targetChat, msgToForward) => {
+    if (!targetChat || !msgToForward) return;
+    const targetPartner = targetChat.members?.find(
+      (m) => String(m?._id || m) !== String(userData?._id)
+    );
+
+    const msgPayload = {
+      chatId: targetChat._id,
+      sender: userData.username,
+      senderId: userData._id,
+      recipientId: targetPartner?._id,
+      text: msgToForward.text || "",
+      mediaUrl: msgToForward.mediaUrl || "",
+      mediaType: msgToForward.mediaType || "text",
+      fileName: msgToForward.fileName || "",
+      fileSize: msgToForward.fileSize || "",
+      isViewOnce: false,
+    };
+
+    const res = await axios.post(`${serverUrl}/api/chat/message`, msgPayload);
+    const saved = res.data;
+
+    sounds.playMessageSent();
+
+    socketRef.current?.emit("send-message", {
+      roomId: targetChat._id,
+      message: saved,
+      recipientId: targetPartner?._id,
+    });
+
+    if (selectedChat && String(selectedChat._id) === String(targetChat._id)) {
+      setSelectedChat((prev) => ({
+        ...prev,
+        messages: [...(prev.messages || []), saved],
+      }));
+    }
+
+    setChats((prev) =>
+      prev.map((c) =>
+        String(c._id) === String(targetChat._id)
+          ? {
+              ...c,
+              messages: [...(c.messages || []), saved],
+              lastMessage: saved.text || (saved.mediaType === "image" ? "📷 Photo" : "📎 File"),
+              lastMessageAt: new Date(),
+            }
+          : c
+      )
+    );
   };
 
   // 6. Voice Recording Completed
@@ -2804,6 +3059,7 @@ export default function Home() {
                 return (
                   <div
                     key={msg._id || idx}
+                    id={`msg-${msg._id}`}
                     className={`flex flex-col ${isSender ? "items-end" : "items-start"} group relative`}
                   >
                     <div
@@ -2820,16 +3076,68 @@ export default function Home() {
                         </p>
                       )}
 
-                      {/* Image Attachment */}
-                      {msg.mediaType === "image" && msg.mediaUrl && (
-                        <div className="my-1 rounded-xl overflow-hidden cursor-pointer border border-white/10">
-                          <img
-                            src={getMediaUrl(msg.mediaUrl)}
-                            alt="Attached"
-                            onClick={() => setPreviewImage(getMediaUrl(msg.mediaUrl))}
-                            className="max-h-72 w-full object-cover rounded-xl hover:scale-[1.01] transition duration-200"
-                          />
+                      {/* Quoted / Replied-to Message Banner */}
+                      {msg.replyTo && msg.replyTo.sender && (
+                        <div
+                          onClick={() => {
+                            const el = document.getElementById(`msg-${msg.replyTo.messageId}`);
+                            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }}
+                          className="mb-2 p-2 rounded-lg bg-black/25 hover:bg-black/35 border-l-4 border-[#00a884] text-xs cursor-pointer transition select-none text-left"
+                        >
+                          <p className="font-bold text-[11px] text-[#25d366] truncate">
+                            {msg.replyTo.sender === userData.username ? "You" : msg.replyTo.sender}
+                          </p>
+                          <p className="text-[11px] text-[#e9edef]/80 truncate">
+                            {msg.replyTo.text ||
+                              (msg.replyTo.mediaType === "audio"
+                                ? "🎵 Voice message"
+                                : "📷 Photo")}
+                          </p>
                         </div>
+                      )}
+
+                      {/* View-Once Photo or Standard Image */}
+                      {msg.isViewOnce ? (
+                        msg.viewOnceOpened ? (
+                          <div className="flex items-center gap-2 py-1.5 px-1 text-xs text-[#8696a0] select-none font-medium">
+                            <IconViewOnce className="w-4 h-4 text-[#8696a0]" />
+                            <span>Photo • Opened</span>
+                          </div>
+                        ) : isSender ? (
+                          <div className="flex items-center gap-2 py-1.5 px-1 text-xs select-none font-medium text-[#e9edef]">
+                            <div className="w-5 h-5 rounded-full border border-[#00a884] text-[#00a884] flex items-center justify-center font-bold text-[10px]">
+                              1
+                            </div>
+                            <span>Photo (View once)</span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenViewOnce(msg)}
+                            className="flex items-center gap-2.5 py-1.5 px-3 my-1 rounded-xl bg-[#111b21]/60 hover:bg-[#111b21] border border-[#00a884]/40 hover:border-[#00a884] transition text-xs font-semibold text-[#e9edef] group cursor-pointer"
+                          >
+                            <div className="w-6 h-6 rounded-full border-2 border-[#00a884] text-[#00a884] flex items-center justify-center font-bold text-xs group-hover:scale-110 transition bg-[#00a884]/15">
+                              1
+                            </div>
+                            <div className="flex flex-col text-left">
+                              <span className="text-[#00a884] group-hover:underline font-bold">Photo</span>
+                              <span className="text-[10px] text-[#8696a0]">Tap to view once</span>
+                            </div>
+                          </button>
+                        )
+                      ) : (
+                        /* Standard Image Attachment */
+                        msg.mediaType === "image" && msg.mediaUrl && (
+                          <div className="my-1 rounded-xl overflow-hidden cursor-pointer border border-white/10">
+                            <img
+                              src={getMediaUrl(msg.mediaUrl)}
+                              alt="Attached"
+                              onClick={() => setPreviewImage(getMediaUrl(msg.mediaUrl))}
+                              className="max-h-72 w-full object-cover rounded-xl hover:scale-[1.01] transition duration-200"
+                            />
+                          </div>
+                        )
                       )}
 
                       {/* Voice Note Attachment */}
@@ -2889,7 +3197,7 @@ export default function Home() {
                             {msg.seen ? (
                               <>
                                 {idx === lastSentMsgIndex && (
-                                  <span className="text-[9px] text-[#53bdeb] font-semibold tracking-tight">
+                                   <span className="text-[9px] text-[#53bdeb] font-semibold tracking-tight">
                                     {msg.seenAt ? `Seen ${formatRelativeTime(msg.seenAt)}` : "Seen"}
                                   </span>
                                 )}
@@ -2926,7 +3234,7 @@ export default function Home() {
                       )}
                     </div>
 
-                    {/* Quick Reaction & Copy Hover Bar */}
+                    {/* Quick Reaction & Action Hover Bar */}
                     {!selectedChat.isAIChat && (
                       <div
                         className={`absolute -top-7 ${
@@ -2942,6 +3250,27 @@ export default function Home() {
                             {emoji}
                           </button>
                         ))}
+
+                        {/* Reply to message */}
+                        <button
+                          onClick={() => setReplyingTo(msg)}
+                          className="p-1 text-[#8696a0] hover:text-[#00a884] transition"
+                          title="Reply"
+                        >
+                          <IconReply className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Forward message */}
+                        <button
+                          onClick={() => {
+                            setForwardingMsg(msg);
+                            setShowForwardModal(true);
+                          }}
+                          className="p-1 text-[#8696a0] hover:text-[#00a884] transition"
+                          title="Forward message"
+                        >
+                          <IconForward className="w-3.5 h-3.5" />
+                        </button>
 
                         {/* Copy message text */}
                         {msg.text && (
@@ -2993,6 +3322,98 @@ export default function Home() {
                 </div>
               ) : (
                 <>
+                  {/* Replying-To Banner */}
+                  {replyingTo && (
+                    <div className="mb-2 p-2.5 px-3 rounded-xl bg-[#111b21] border-l-4 border-[#00a884] flex items-center justify-between text-xs shadow-xs animate-fade-in select-none">
+                      <div className="flex-1 min-w-0 pr-2">
+                        <p className="font-bold text-[#00a884] text-[11px] truncate">
+                          Replying to {replyingTo.sender === userData.username ? "yourself" : replyingTo.sender}
+                        </p>
+                        <p className="text-[#aebac1] truncate text-[11px] mt-0.5">
+                          {replyingTo.text ||
+                            (replyingTo.mediaType === "audio"
+                              ? "🎵 Voice message"
+                              : "📷 Photo")}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReplyingTo(null)}
+                        className="p-1 rounded-full text-[#8696a0] hover:text-white hover:bg-[#202c33] transition"
+                        title="Cancel reply"
+                      >
+                        <IconClose className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Photo Staging / Caption / View-Once Bar */}
+                  {pendingUploadPreview && (
+                    <div className="p-3 bg-[#182229] rounded-2xl border border-[#2e3b43] mb-2 animate-scale-up space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-[#2e3b43] flex-shrink-0 bg-black">
+                          <img
+                            src={pendingUploadPreview}
+                            alt="Staged"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <input
+                            type="text"
+                            value={pendingCaption}
+                            onChange={(e) => setPendingCaption(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendPendingImage()}
+                            placeholder="Add a caption..."
+                            className="w-full bg-[#111b21] border border-[#2e3b43] focus:border-[#00a884] rounded-xl px-3 py-2 text-xs text-[#e9edef] placeholder-[#8696a0] focus:outline-none transition"
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-[#222d34]">
+                        {/* WhatsApp ① View Once Toggle */}
+                        <button
+                          type="button"
+                          onClick={() => setIsViewOnceActive(!isViewOnceActive)}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold transition cursor-pointer select-none ${
+                            isViewOnceActive
+                              ? "bg-[#00a884]/20 border-[#00a884] text-[#00a884] shadow-xs"
+                              : "bg-[#111b21] border-[#2e3b43] text-[#8696a0] hover:text-[#e9edef]"
+                          }`}
+                          title={isViewOnceActive ? "View once active (tap to turn off)" : "Set to View Once"}
+                        >
+                          <div
+                            className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold ${
+                              isViewOnceActive ? "border-[#00a884] text-[#00a884]" : "border-current"
+                            }`}
+                          >
+                            1
+                          </div>
+                          <span>{isViewOnceActive ? "View Once Photo" : "View Once"}</span>
+                        </button>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCancelPendingUpload}
+                            className="px-3 py-1.5 rounded-xl text-xs text-[#8696a0] hover:text-white hover:bg-[#202c33] transition"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSendPendingImage}
+                            className="px-4 py-1.5 rounded-xl bg-[#00a884] hover:bg-[#02906f] text-[#111b21] font-bold text-xs flex items-center gap-1.5 shadow-md shadow-[#00a884]/25 transition hover:scale-105 active:scale-95"
+                          >
+                            <span>Send</span>
+                            <IconSend className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Emoji Picker Popover */}
                   {showEmojiPicker && (
                     <EmojiPicker
@@ -3376,6 +3797,72 @@ export default function Home() {
           onLeaveGroup={handleLeaveGroup}
         />
       )}
+
+      {/* ======================================================== */}
+      {/* 12. VIEW-ONCE PHOTO VIEWER MODAL */}
+      {/* ======================================================== */}
+      {activeViewOnceMedia && (
+        <div
+          onClick={() => setActiveViewOnceMedia(null)}
+          className="fixed inset-0 z-[270] bg-black/98 backdrop-blur-md flex flex-col items-center justify-center p-4 select-none cursor-pointer"
+        >
+          {/* Top Info Banner */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-6 left-6 right-6 flex items-center justify-between text-[#e9edef]"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full border-2 border-[#00a884] text-[#00a884] flex items-center justify-center font-bold text-xs bg-[#00a884]/20">
+                1
+              </div>
+              <div>
+                <p className="font-bold text-sm">View Once Photo</p>
+                <p className="text-[11px] text-[#8696a0]">
+                  This photo will disappear once closed
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveViewOnceMedia(null)}
+              className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition"
+              title="Close"
+            >
+              <IconClose className="w-6 h-6" />
+            </button>
+          </div>
+
+          <img
+            src={getMediaUrl(activeViewOnceMedia.mediaUrl)}
+            alt="View Once"
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[82vh] max-w-[92vw] object-contain rounded-2xl shadow-2xl border border-white/10"
+          />
+
+          {activeViewOnceMedia.text && activeViewOnceMedia.text !== activeViewOnceMedia.fileName && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="mt-4 px-4 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-sm max-w-lg text-center"
+            >
+              {activeViewOnceMedia.text}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 13. FORWARD MESSAGE MODAL */}
+      {/* ======================================================== */}
+      <ForwardMessageModal
+        isOpen={showForwardModal}
+        onClose={() => {
+          setShowForwardModal(false);
+          setForwardingMsg(null);
+        }}
+        message={forwardingMsg}
+        chats={chats}
+        currentUser={userData}
+        onForward={handleForwardMessage}
+      />
     </div>
   );
 }

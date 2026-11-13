@@ -145,7 +145,7 @@ export const updateGroupInfo = async (req, res) => {
 // 3. SEND MESSAGE (supports text, media, voice, replies)
 export const sendMessage = async (req, res) => {
   try {
-    const { chatId, sender, senderId, recipientId, text, mediaUrl, mediaType, fileName, fileSize, system, replyTo } = req.body;
+    const { chatId, sender, senderId, recipientId, text, mediaUrl, mediaType, fileName, fileSize, system, replyTo, isViewOnce } = req.body;
 
     if (!chatId || !sender) {
       return res.status(400).json({ error: "chatId and sender are required" });
@@ -169,6 +169,8 @@ export const sendMessage = async (req, res) => {
       fileSize: fileSize || "",
       system: !!system,
       replyTo: replyTo || null,
+      isViewOnce: !!isViewOnce,
+      viewOnceOpened: false,
       seen: false,
       seenAt: null,
       createdAt: new Date(),
@@ -391,6 +393,26 @@ export const searchUsers = async (req, res) => {
       .limit(15);
 
     res.status(200).json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// 12. MARK VIEW ONCE AS OPENED
+export const markViewOnceOpened = async (req, res) => {
+  try {
+    const { chatId, messageId } = req.params;
+    const chat = await Chat.findById(chatId);
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    const msg = chat.messages.id(messageId);
+    if (!msg) return res.status(404).json({ error: "Message not found" });
+
+    msg.viewOnceOpened = true;
+    msg.viewOnceOpenedAt = new Date();
+    await chat.save();
+
+    res.status(200).json({ success: true, messageId, viewOnceOpened: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
